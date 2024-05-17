@@ -1,0 +1,8 @@
+"0","lambda <- 1.4   # Fixing lambda"
+"0",""
+"0","k <- 1:30       # I arbitraly choose the range from 1 to 30"
+"0",""
+"0","# PDF plot"
+"0","plot(k, dztpois(k, lambda), type = ""s"", lwd = 2, col = ""blue"","
+"0","     xlab = ""k"", ylab = ""Probability density"","
+"0","     main = ""PDF of zero-truncated Poisson distribution"")"

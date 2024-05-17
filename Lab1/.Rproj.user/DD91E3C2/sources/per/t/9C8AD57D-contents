@@ -1,0 +1,448 @@
+---
+title: "Liotta_Dario_Rlab01"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-04-09"
+---
+
+Libraries used for this exercise:
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(geosphere)
+library(RColorBrewer)
+```
+
+# 1. read the data and import in a `data.frame` or `tibble structure`
+
+```{r}
+PATH     <- "/Users/darioliotta/Documents/Physics\ of\ Data/Advance\ Statistics\ for\ Physics/Labs/Lab1/Data/"
+BASENAME <- "JC-20190"
+LASTNAME <- "-citibike-tripdata.csv"
+
+n <- 2  # Enumeration of files starts from 2
+
+file_name <- c()      # Empty vector where I'll save the complete name of each file
+dataset   <- list()   # Empty list where I'll save the datasets
+
+for (i in 1:5) {
+  
+  file_name[i] <- sprintf("%s%s%i%s", PATH, BASENAME, n, LASTNAME)
+  dataset[[i]] <- read.csv(file_name[i])
+  n <- n + 1   # Update of the enumeration
+  
+}
+```
+
+# 2. merge the five data frames in an unique structure
+
+I'll use the function `bind_rows()` from `dplyr` package that vertically stack multiple dataframes.
+
+```{r}
+dataset <- bind_rows(dataset)
+head(dataset, 10)
+```
+
+# 3. check for missing data and remove it, if any
+
+I'll use the function `na.omit()` that remove rows with missing values (NAs).
+
+```{r}
+dataset2 <- na.omit(dataset)
+```
+
+# 4.1 compute the average and the median trip duration in minutes
+
+```{r}
+duration_mean   <- mean(dataset$tripduration)   / 60.00
+duration_median <- median(dataset$tripduration) / 60.00
+
+print(sprintf("Average trip duration: %.2f minutes", duration_mean))
+print(sprintf("Median trip duration: %.2f minutes", duration_median))
+```
+
+# 4.2 evaluate the minimum and maximum trip duration; does that sound like a reasonable value?
+
+```{r}
+duration_min <- min(dataset$tripduration) / 60.00
+duration_max <- max(dataset$tripduration) / 60.00
+
+print(sprintf("Minimum trip duration: %.2f minutes", duration_min))
+print(sprintf("Maximum trip duration: %.2f minutes", duration_max))
+```
+
+$28817$ minutes mean approximately $20$ days non stop, so it does not sound like a reasonable value.
+
+# 4.3 repeat the calculation of the average (and the median) trip duration by excluding trips longer than 3 hours. Next, evaluate the number of skimmed entries
+
+```{r}
+dataset_filtered <- dataset[dataset$tripduration <= (60 * 3 * 60),]
+
+duration_mean_filtered   <- mean(dataset_filtered$tripduration)   / 60.00
+duration_median_filtered <- median(dataset_filtered$tripduration) / 60.00
+
+print(sprintf("Average trip duration with skimmed data: %.2f minutes", duration_mean_filtered))
+print(sprintf("Median trip duration with skimmed data: %.2f minutes", duration_median_filtered))
+
+entries_skimmed <- nrow(dataset) - nrow(dataset_filtered)
+print(sprintf("Number of entries excluded (trips duration over 3 hours): %d", entries_skimmed))
+```
+
+# 4.4 plot the distribution of trip duration after the skimming of the previous point
+
+```{r}
+ggplot(dataset_filtered, aes(x = tripduration / 60.00)) +
+       geom_histogram(bins = 30, color = "steelblue", fill = "skyblue", alpha = 0.7) +   # Number of bins is arbitraly chosen
+       labs(title = "Distribution of trip duration",
+            x     = "Trip Duration (minutes)",
+            y     = "Frequency") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5))  # To center the title
+```
+
+# 5. plot the monthly average trip duration
+
+```{r}
+times   <- dataset$tripduration
+months  <- dataset$starttime
+
+for (i in 1:length(months)) {
+  months[i] <- substr(months[i], 1, 7)  # I get only YYYY-MM for every record
+}
+
+data <- tapply(times, months, mean)                     # I group trip durations by months and evaluate the mean
+monthly_average_trip_duration <- double(length(data))   # Empty vector where I'll save the monthly average of trip durations
+
+for (i in 1:length(data)) {
+  monthly_average_trip_duration[i] <- data[[i]] / 60.00
+}
+
+barplot(monthly_average_trip_duration,
+        names.arg = names(data),
+        main      = "Monthly Average Trip Duration",
+        xlab      = "Month",
+        ylab      = "Average Trip Duration (Minutes)",
+        col       = "skyblue",
+        border    = "black",
+        cex.axis  = 0.9,
+        cex.lab   = 1.2,
+)
+
+abline(h = duration_mean, col = "red", lty = 2)                                    # I also plot the average trip duration...
+text(x = 1.2, y = 13.5, labels = "Average trip duration", col = "red", font = 2)   # ...with some label above
+```
+
+# 6.1 plot the number of rides per day
+
+I'll consider only the days where the rides start, so I'll exclude the cases where a rides appear to be between to days (like the ones around midnight).
+
+```{r}
+times     <- dataset$tripduration
+startdays <- dataset$starttime
+
+for (i in 1:length(startdays)) {
+  startdays[i] <- substr(startdays[i], 1, 10)   # I get only YYYY-MM-DD for every record
+}
+
+data <- tapply(startdays, startdays, length)   # With 'length' I evaluate the number of distinct startdays
+number_of_rides_per_day <- c(length(data))
+
+for (i in 1:length(data)) {
+  number_of_rides_per_day[i] <- data[[i]]
+}
+
+plot(1:length(number_of_rides_per_day), 
+     number_of_rides_per_day, 
+     type = "l", 
+     main = "Number of rides per day", 
+     xlab = "Days", 
+     ylab = "Number of rides",
+     col  = "steelblue",
+     lwd  = 2
+)
+grid()
+```
+
+# 6.2 plot the hourly distribution on weekdays and on weekends
+
+In order to evaluate the day of the week for each calendar day I convert the `startdays` (made by strings) to a date and time format with `as.POSIXct()`; the, I'll use the `weekdays()` that do exactly what I want for this point.
+
+```{r}
+starthours <- dataset$starttime
+
+for (i in 1:length(starthours)) {
+  starthours[i] <- substr(starthours[i], 12, 13)   # I get only HH for every record
+}
+
+startdays         <- as.POSIXct(startdays)   # Conversion into date and time format
+startdays_of_week <- weekdays(startdays)     # Conversion into days of the week
+```
+
+In this case I will also consider the `stopdays` because I'm interested into the hourly distribution, and from point 4.3 I know that trips lasting longer than 3 hours are very rare, so most of the time rides last two hours tops; in this cases I will consider both those hours, taking the starting hour and the ending hour.
+
+```{r}
+# Doing the same process also for stopdays
+
+data <- dataset$stoptime
+
+stopdays  <- character(length(data))
+stophours <- character(length(data))
+
+for (i in 1:length(data)) {
+  stopdays[i]  <- substr(data[[i]], 1, 10)
+  stophours[i] <- substr(data[[i]], 12, 13)
+}
+
+stopdays         <- as.POSIXct(stopdays)
+stopdays_of_week <- weekdays(stopdays)
+```
+
+To select which hours are in weekdays or in weekends I create a logical mask where, by convenction, I associate TRUE values to weekdays and FALSE values to weekends. I then apply this mask with `ifelse()`, setting to $-1$ each element that doesn't belong to the corresponding vector (the weekdays one and the weekends one).
+
+```{r}
+weekdays = c("Monday", "Tuesday", "Wednesday", "Thursday", "Friday")
+weekends = c("Saturday", "Sunday")
+
+startmask = logical(length(startdays))
+stopmask  = logical(length(stopdays))
+
+# Mask of startdays
+
+for (i in 1:length(startdays_of_week)) {
+  if (startdays_of_week[i] %in% weekdays) {
+    startmask[i] <- TRUE
+  }
+  else if (startdays_of_week[i] %in% weekends) {
+    startmask[i] <- FALSE
+  }
+}
+
+# Mask of stopdays
+
+for (i in 1:length(stopdays_of_week)) {
+  if (stopdays_of_week[i] %in% weekdays) {
+    stopmask[i] <- TRUE
+  }
+  else if (stopdays_of_week[i] %in% weekends) {
+    stopmask[i] <- FALSE
+  }
+}
+
+# Applying the mask
+
+starthours_weekdays <- as.numeric(ifelse(!startmask, -1, starthours))
+starthours_weekends <- as.numeric(ifelse(startmask, -1, starthours))
+stophours_weekdays  <- as.numeric(ifelse(!stopmask, -1, stophours))
+stophours_weekends  <- as.numeric(ifelse(stopmask, -1, stophours))
+```
+
+Finally, I can plot the results.
+
+```{r}
+par(mfrow = c(1, 2))   # For having two subplots one next to the other
+
+data <- c(starthours_weekdays, stophours_weekdays)
+
+hist(data[data != -1],
+     breaks   = 24,
+     xlab     = "Hours",
+     ylab     = "Frequency",
+     main     = "Hourly distribution in weekdays",
+     col      = "skyblue",
+     border   = "black",
+     cex.axis = 0.8,
+     cex.lab  = 1.1
+)
+
+data <- c(starthours_weekends, stophours_weekends)
+
+hist(data[data != -1],
+     breaks   = 24,
+     xlab     = "Hours",
+     ylab     = "Frequency",
+     main     = "Hourly distribution in weekends",
+     col      = "skyblue",
+     border   = "black",
+     cex.axis = 0.8,
+     cex.lab  = 1.1,
+)
+```
+
+# 6.3 plot again the average hourly distribution on weekdays but separating customer and subscriber users
+
+For this point I will use the same logic of masking seen above, discerning between customers (TRUE values) and subscribers (FALSE values).
+
+```{r}
+usertype = dataset$usertype
+usermask = logical(length(usertype))
+
+for (i in 1:length(usertype)) {
+  if (usertype[i] == "Customer") {
+    usermask[i] <- TRUE
+  }
+  else if (usertype[i] == "Subscriber") {
+    usermask[i] <- FALSE
+  }
+}
+
+starthours_weekdays_customer    <- as.numeric(ifelse(!usermask, -1, starthours))
+stophours_weekdays_customer     <- as.numeric(ifelse(!usermask, -1, stophours))
+starthours_weekdays_subscriber  <- as.numeric(ifelse(usermask, -1, starthours))
+stophours_weekdays_subscriber   <- as.numeric(ifelse(usermask, -1, stophours))
+
+par(mfrow = c(1, 2))
+
+data <- c(starthours_weekdays_customer, stophours_weekdays_customer)
+
+hist(data[data != -1],
+     breaks   = 24,
+     xlab     = "Hours",
+     ylab     = "Frequency",
+     main     = "Distribution for customers",
+     col      = "skyblue",
+     border   = "black",
+     cex.axis = 0.8,
+     cex.lab  = 1.1
+)
+
+data <- c(starthours_weekdays_subscriber, stophours_weekdays_subscriber)
+
+hist(data[data != -1],
+     breaks   = 24,
+     xlab     = "Hours",
+     ylab     = "Frequency",
+     main     = "Distribution for subscribers",
+     col      = "skyblue",
+     border   = "black",
+     cex.axis = 0.8,
+     cex.lab  = 1.1,
+)
+```
+
+# 7.1 using the latitude and longitude information, evaluate the average speed (in km/h) of a user, discarding the trip lasting longer than 1 hour
+
+As suggested by the professor, I'll use the function `distHaversine()` from the `geosphere` package that evaluates the distance between two points given latitude and longitude for both those points, so the average speed will be evaluated with respect to the minimum distance between start and stop point and not the actual distance covered by streets.
+
+```{r}
+x_start <- dataset$start.station.latitude
+y_start <- dataset$start.station.longitude
+x_stop  <- dataset$end.station.latitude
+y_stop  <- dataset$end.station.longitude
+
+distances <- double(length(x_start))
+
+# distHaversine() returns values in meters, so I divide by 1000 in order to have them in kilometers
+
+for (i in 1:length(x_start)) {
+  distances[i] <- distHaversine(c(x_start[i], y_start[i]), c(x_stop[i], y_stop[i])) / 1000.00
+}
+
+time_in_hour <- dataset$tripduration / 60.00 / 60.00   # Converting in hours
+
+average_speed <- distances / time_in_hour
+average_speed <- average_speed[time_in_hour < 1]   # Discarding trips longer than 1 hour
+
+# Printing the average speed of the first 100 users of the dataset just as an example
+
+print("Average speed of 100 users (km/h):")
+head(average_speed, 100)
+```
+
+# 7.2 plot the average speed as a function of route length for the following group of distances d < 500 m, 500m < d < 1000m, 1000m < d < 2000m, 2000m < d < 3000m, d > 3000m and discarding trips longer than 1 hour
+
+```{r}
+distances <- distances[time_in_hour < 1]       # Discarding trips longer than 1 hour
+limits <- c(0, 0.5, 1, 2, 3, max(distances))   # Vector of thresholds
+
+for (i in 1:(length(limits)-1)) {
+  plot(distances[distances > limits[i] & distances < limits[i+1]], 
+       average_speed[distances > limits[i] & distances < limits[i+1]], 
+       main = sprintf("Average speed vs. Distance (%.1f km < Distance < %.1f km)", limits[i], limits[i+1]), 
+       xlab = "Distance (km)", 
+       ylab = "Average speed (km/h)",
+       col  = "steelblue"
+      )
+  grid()
+}
+```
+
+# 7.3 repeat the same graph, but show the results obtained separately for weekdays and weekends
+
+I will reuse the `startmask` defined in point 6.2.
+
+```{r}
+startmask = startmask[time_in_hour < 1]
+
+for (i in 1:(length(limits)-1)) {
+  plot(distances[distances > limits[i] & distances < limits[i+1] & startmask], 
+       average_speed[distances > limits[i] & distances < limits[i+1] & startmask], 
+       main = sprintf("Average speed vs. Distance in weekdays (%.1f km < Distance < %.1f km)", limits[i], limits[i+1]), 
+       xlab = "Distance (km)", 
+       ylab = "Average speed (km/h)",
+       col  = "steelblue"
+      )
+  grid()
+}
+
+for (i in 1:(length(limits)-1)) {
+  plot(distances[distances > limits[i] & distances < limits[i+1] & !startmask], 
+       average_speed[distances > limits[i] & distances < limits[i+1] & !startmask], 
+       main = sprintf("Average speed vs. Distance in weekends (%.1f km < Distance < %.1f km)", limits[i], limits[i+1]), 
+       xlab = "Distance (km)", 
+       ylab = "Average speed (km/h)",
+       col  = "steelblue"
+      )
+  grid()
+}
+```
+
+# 8.1 find the most common start station and the least popular end station
+
+```{r}
+start_station_frequencies <- table(dataset$start.station.name)
+end_station_frequencies   <- table(dataset$end.station.name)
+
+print(sprintf("Most common start station: %s (%d times)", names(which.max(start_station_frequencies)), max(start_station_frequencies)))
+print(sprintf("Least popular end station: %s (%d time)", names(which.min(end_station_frequencies)), min(end_station_frequencies)))
+```
+
+# 8.2 show the distribution of start stations
+
+I don't know if the question asks about the distribution with respect to the coordinates or the frequency, so I plotted both things with ggplot: on the x-axis I put the longitude and on the y-axis I put the latitude, considering also a scale color gradient that goes from lightblue (least frequent station) to darkblue (most frequent station).
+
+```{r}
+start_station_count <- dataset[, c("start.station.longitude", "start.station.latitude")] %>%
+                       group_by(start.station.longitude, start.station.latitude)         %>%
+                       summarise(Count = n(), .groups = "drop")
+
+ggplot(start_station_count, aes(x = start.station.longitude, y = start.station.latitude)) +
+       geom_point(aes(color = Count)) +
+       scale_color_gradient(low = "lightblue", high = "darkblue") +
+       labs(title = "Distribution of start stations", x = "Longitudine", y = "Latitudine") +
+       theme_minimal() +
+       theme(plot.title = element_text(hjust = 0.5))
+```
+
+# 8.3 find the three most common routes (start and end station) and the three least popular ones
+
+```{r}
+route_counter <- dataset %>%
+                 count(start.station.name, end.station.name, name = "count") %>%
+                 arrange(desc(count))
+
+print("Three most common routes:")
+for (i in 1:3) {
+  print(sprintf("%s -> %s (%d times)", route_counter$start.station.name[i], route_counter$end.station.name[i], route_counter$count[i]))
+}
+
+cat("\n")
+
+print("Three least popular routes:")
+for (i in 0:2) {
+  j <- nrow(route_counter) - i
+  print(sprintf("%s -> %s (%d time)", route_counter$start.station.name[j], route_counter$end.station.name[j], route_counter$count[j]))
+}
+```

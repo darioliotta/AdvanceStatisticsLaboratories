@@ -1,0 +1,163 @@
+---
+title: "Liotta_Dario_Rlab04"
+output: html_document
+date: "2024-05-16"
+---
+
+```{r}
+where_does_integrate <- function(f, x_value, lower = 0, upper = 1) {
+  
+  xs <- c(lower, upper, by = 10^(-6))
+  vs <- double(length(xs))
+  
+  for(i in 1:length(vs)) {
+    vs[i] = f(xs[i])
+  }
+  
+  integral_values <- cumsum(vs)
+  
+  minimum_v <- xs[length(xs)]
+  for(i in 1:length(integral_values)) {
+    v <- abs(integral_values[i] - x_value)
+    if(v < minimum_v) {
+      minimum_v   <- v
+      lower_bound <- xs[i]
+    }
+  }
+  
+  return(lower_bound)
+  
+}
+```
+
+# Exercise 2
+
+***(a) find the posterior distribution, the posterior mean and standard deviation***
+
+```{r}
+precision <- 10^(-5)
+
+data <- c(4.09, 4.68, 1.87, 2.62, 5.58, 8.68, 4.07, 4.78, 4.79, 4.49, 5.85, 5.09, 2.40, 6.27, 6.30, 4.47)
+
+prior <- function(mu) {
+  if(mu == 0) {
+    mu <- precision
+  }
+  
+  if(mu > 0 && mu <= 3) {
+    return(mu)
+  }
+  else if(mu > 3 && mu <= 5) {
+    return(3)
+  }
+  else if(mu > 5 && mu <= 8) {
+    return(8 - mu)
+  }
+  else if(mu > 8) {
+    return(0)
+  }
+}
+
+posterior <- function(mu) {
+  variance <- 4
+  return(prior(mu) * dnorm(mean(data), mean = mu, sd = sqrt(variance / length(data))))
+}
+
+mus <- seq(0, 12, by = precision)
+vs  <- double(length(mus))
+
+for(i in 1:length(mus)) {
+  vs[i] <- posterior(mus[i])
+}
+
+vs <- vs / sum(vs)
+
+plot(mus, vs, 
+     type = "l", lwd = 2, col = "blue",
+     xlab = expression(mu), ylab = "Probability density",
+     main = "Posterior pdf"
+    )
+grid()
+
+posterior_mean <- sum(mus * vs)
+cat(sprintf("Posterior mean: %.3f\n", posterior_mean))
+
+posterior_variance <- sum((mus - posterior_mean)^2 * vs)
+cat(sprintf("Posterior standard deviation: %.3f\n", sqrt(posterior_variance)))
+```
+
+# Exercise 3
+
+```{r}
+# Function of the toy model
+six_boxes_toy_model <- function(n_boxes, n_extractions) {
+  
+  # Getting the vector of names (H0, H1, H2, ...)
+  box_names <- character(n_boxes)
+  
+  for(i in 1:n_boxes) {
+    box_names[i] <- paste("H", i-1, sep = "")
+  }
+  
+  # Extraction of the box
+  box <- sample(0:(n_boxes-1), 1)
+  
+  # Extractions of the balls from the chosen box
+  extractions <- rbinom(n_extractions, 1, box / (n_boxes - 1))
+  
+  # Fixing the matrix of probabilities: columns are boxes, rows are extractions
+  p <- matrix(0, ncol = n_boxes, nrow = n_extractions + 1)
+  p[1,] <- 1/n_boxes   # The first row represent the prior probability, so 1/6 in our case
+  
+  # I choose outcome 1 as extraction of a white ball and outcome 0 as extraction of a black ball
+  ps_white <- seq(0, 5) / (n_boxes - 1)
+  ps_black <- 1 - ps_white
+  
+  cat(sprintf("Box chosen: H%d\n\n", box))
+  cat(paste("Probabilities:\n"))
+
+  # Update of the probabilities with extractions
+  for(i in 1:n_extractions) {
+    
+    if(extractions[i] == 0) {
+      v <- ps_black * p[i,]
+    }
+    
+    else if(extractions[i] == 1) {
+      v <- ps_white * p[i,]
+    }
+    
+    p[i+1,] <- v / sum(v)   # Normalization
+    
+    cat(sprintf("After extraction %d: ", i))
+    
+    for(j in 1:n_boxes) {
+      cat(sprintf("%s -> %.2f%%   ", box_names[j], p[i+1,j] * 100))
+    }
+    
+    cat(sprintf("\n"))
+  }
+  
+  # Plots
+  colors = c("red", "blue", "yellow", "green", "orange", "brown")
+  
+  plot(seq(0, n_extractions), p[,1],
+       type = "l", lwd = 2, col = colors[1],
+       main = "Probability change with extractions",
+       xlab = "Number of extraction",
+       ylab = "Probability",
+       xlim = c(0, n_extractions+6),
+       ylim = c(0, 1.1)
+      )
+  grid()
+  
+  for(j in 2:ncol(p)) {
+    lines(seq(0, n_extractions), p[,j], lwd = 2, col = colors[j])
+  }
+  
+  legend("right", legend = box_names, col = colors, lwd = 2)
+    
+}
+
+six_boxes_toy_model(n_boxes = 6, n_extractions = 50)
+```

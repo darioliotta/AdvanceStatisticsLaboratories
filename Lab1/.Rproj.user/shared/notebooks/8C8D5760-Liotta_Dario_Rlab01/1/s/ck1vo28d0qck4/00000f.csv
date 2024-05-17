@@ -1,0 +1,8 @@
+"0","starthours <- dataset$starttime"
+"0",""
+"0","for (i in 1:length(starthours)) {"
+"0","  starthours[i] <- substr(starthours[i], 12, 13)   # I get only HH for every record"
+"0","}"
+"0",""
+"0","startdays         <- as.POSIXct(startdays)   # Conversion into date and time format"
+"0","startdays_of_week <- weekdays(startdays)     # Conversion into days of the week"

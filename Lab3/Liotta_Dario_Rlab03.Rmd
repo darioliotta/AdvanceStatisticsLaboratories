@@ -1,0 +1,705 @@
+---
+title: "Liotta_Dario_Rlab03"
+output: html_document
+date: "2024-05-11"
+---
+
+```{r}
+library(scales)
+```
+
+# Exercise 1
+
+***The number of particles emitted by a radioactive source during a fixed interval of time (∆t = 10 s) follows a Poisson distribution on the parameter μ. The number of particles observed during consecutive time intervals is: 4, 1, 3, 1, 5 and 3.***
+
+***(a) assuming a positive uniform prior distribution for the parameter μ***
+
+* ***determine and draw the posterior distribution for μ, given the data***
+* ***evaluate mean, median and variance, both analytically and numerically in R***
+
+Since we know that the likelihood has the shape of a Poisson distribution and $x_1,x_2,\dots,x_6$ are taken from this distribution then the overall likelihood will be
+
+$$f\left(x_1,\dots,x_6|\mu\right)\propto\mu^{x_1}e^{-\mu}\cdot\dots\cdot\mu^{x_6}e^{-\mu}=\mu^{\sum\limits_{i=1}^6x_i}e^{-6\mu}$$
+
+Assuming a prior $g(\mu)=1$ then the posterior will be
+
+$$h(\mu|x_1,\dots,x_6)\propto g(\mu)\cdot f\left(x_1,\dots,x_6|\mu\right)\propto f\left(x_1,\dots,x_6|\mu\right)$$
+
+This distribution is in the form of an Erlang distribution:
+
+$$Erlang(t|\lambda,n)\propto t^{n-1}e^{-\lambda t}$$
+
+In our case $t=\mu$, $\lambda=6$ and $n=\sum\limits_{i=1}^6x_i+1$, so we can now evaluate all the parameters we want. First we go with the plot.
+
+```{r}
+x <- c(4, 1, 3, 1, 5, 3)  # Data
+
+limit  <- 10
+mus    <- seq(0, limit, by = 0.01)  # Generation of mu values
+
+# Plot
+plot(mus, dgamma(mus, shape = sum(x)+1, rate = length(x)),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = expression(mu),
+     ylab = "Posterior Density",
+     main = "Posterior pdf with uniform prior"
+    )
+axis(side = 1, at = seq(1, limit-1, by = 2))  # To have every integer on x-axis labelled
+grid(lty = 2.5, col = "lightgray")
+```
+
+Now we search for the required analytical solutions (as far as I know, there is no closed formula that can evaluate the median of an Erlang distribution, so I will evaluate only the numerical form of that).
+
+```{r}
+lambda <- length(x)
+n      <- sum(x)+1
+
+# Mean of an Erlang distribution is n/lambda
+cat(sprintf("Mean: %.2f\n", n/lambda))
+
+# Mean of an Erlang distribution is n/(lambda^2)
+cat(sprintf("Variance: %.2f", n/(lambda^2)))
+```
+
+Now we go for the numerical solutions.
+
+```{r}
+# Likelihood function as product of poisson pdfs
+likelihood <- function(x, mu) {
+  return(prod(dpois(x, mu)))
+}
+
+post_uniform <- sapply(mus, likelihood, x = x)    # Applying them to the likelihood function
+post_uniform <- post_uniform / sum(post_uniform)  # Normalizing posterior function
+
+mean_num_uniform     <- sum(mus * post_uniform)
+median_num_uniform   <- mus[which.min(abs(cumsum(post_uniform) - 0.5))]
+variance_num_uniform <- sum((mus - mean_num_uniform)^2 * post_uniform)
+
+cat(sprintf("Mean: %.2f\n", mean_num_uniform))
+cat(sprintf("Median: %.2f\n", median_num_uniform))
+cat(sprintf("Variance: %.2f", variance_num_uniform))
+```
+
+***(b) assuming a Gamma prior such that the expected value is μ = 3 with a standard deviation σ = 1,***
+
+* ***determine and draw the posterior distribution for μ, given the data***
+* ***evaluate mean, median and variance, both analytically and numerically in R.***
+
+Gamma distribution is in the form
+
+$$Gamma(t|\lambda,k)\propto t^{k-1}e^{-\lambda t}$$
+
+with mean and variance given by
+
+$$\begin{cases}\frac{k}{\lambda}=3\\ \frac{k}{\lambda^2}=1\end{cases} \ \Longrightarrow \ \begin{cases}k=3\lambda \\ \frac{3}{\lambda}=1\end{cases} \ \Longrightarrow \ \begin{cases}k=9\\ \lambda=3\end{cases}$$
+
+The posterior will be
+
+$$h(\mu|x_1,\dots,x_6)\propto g(\mu)\cdot f(x_1,\dots,x_6|\mu)\propto \mu^{k-1}e^{-\lambda\mu}\cdot\mu^{\sum\limits_{i=1}^6x_i}e^{-6\mu}=\mu^{\sum\limits_{i=1}^6x_i+k-1}e^{-(\lambda+6)\mu}$$
+
+Following the same reasoning as above, we've got $\lambda'=\lambda+6=9$ and $k'=\sum\limits_{i=1}^6x_i+k=\sum\limits_{i=1}^6x_i+9$, so we can follow the same steps.
+
+```{r}
+# Parameters
+k      <- 9
+lambda <- 3
+
+# Plot
+plot(mus, dgamma(mus, shape = sum(x)+k, rate = length(x)+lambda),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = expression(mu),
+     ylab = "Posterior Density",
+     main = "Posterior pdf with Gamma prior"
+    )
+axis(side = 1, at = seq(1, limit-1, by = 2))  # To have every integer on x-axis labelled
+grid(lty = 2.5, col = "lightgray")
+```
+
+```{r}
+k      <- sum(x)+9
+lambda <- length(x)+3
+
+cat(sprintf("Mean: %.2f\n", k/lambda))
+cat(sprintf("Variance: %.2f", k/(lambda^2)))
+```
+
+```{r}
+# Posterior function
+posterior <- function(mu) {
+  x      <- c(4, 1, 3, 1, 5, 3)
+  k      <- 9
+  lambda <- 3
+  return(likelihood(x, mu) * dgamma(mu, shape = k, rate = lambda))
+}
+
+post_gamma <- sapply(mus, posterior)
+post_gamma <- post_gamma / sum(post_gamma)
+
+mean_num_gamma     <- sum(mus * post_gamma)
+median_num_gamma   <- mus[which.min(abs(cumsum(post_gamma) - 0.5))]
+variance_num_gamma <- sum((mus - mean_num_gamma)^2 * post_gamma)
+
+cat(sprintf("Mean: %.2f\n", mean_num_gamma))
+cat(sprintf("Median: %.2f\n", median_num_gamma))
+cat(sprintf("Variance: %.2f", variance_num_gamma))
+```
+
+***(c) evaluate a 95% credibility interval for the results obtained with different priors. Compare the result with that obtained using a normal approximation for the posterior distribution, with the same mean and standard deviation***
+
+$95\%$ means two sigmas for the gaussian distribution.
+
+```{r}
+lower_bound_uniform <- min(mus[cumsum(post_uniform) >= 0.025])
+upper_bound_uniform <- max(mus[cumsum(post_uniform) <= 0.975])
+
+lower_bound_gamma <- min(mus[cumsum(post_gamma) >= 0.025])
+upper_bound_gamma <- max(mus[cumsum(post_gamma) <= 0.975])
+
+cat(sprintf("Interval of two sigmas with uniform prior: [%.2f, %.2f]\n", lower_bound_uniform, upper_bound_uniform))
+cat(sprintf("Compared with gaussian: [%.2f, %.2f]\n\n", mean_num_uniform-(2*sqrt(variance_num_uniform)), mean_num_uniform+(2*sqrt(variance_num_uniform))))
+
+cat(sprintf("Interval of two sigmas with gamma prior: [%.2f, %.2f]\n", lower_bound_gamma, upper_bound_gamma))
+cat(sprintf("Compared with gaussian: [%.2f, %.2f]", mean_num_gamma-(2*sqrt(variance_num_gamma)), mean_num_gamma+(2*sqrt(variance_num_gamma))))
+```
+
+```{r}
+norm_values       <- dgamma(mus, shape = sum(x)+1, rate = length(x))
+norm_gauss_values <- dnorm(mus, mean = mean_num_uniform, sd = sqrt(variance_num_uniform))
+
+plot(mus, norm_values,
+     type = "s", col = "blue2", lwd = 2,
+     xlab = expression(mu),
+     ylab = "Posterior Density",
+     main = "Posterior pdf with uniform prior compared with gaussian",
+     xlim = c(1, 5)
+    )
+axis(side = 1, at = seq(1, limit-1, by = 2))
+grid(lty = 2.5, col = "lightgray")
+
+lines(mus, norm_gauss_values, col = "red2", lwd = 2)
+
+interval_uniform       <- c(lower_bound_uniform, upper_bound_uniform)
+interval_uniform_gauss <- c(mean_num_uniform-(2*sqrt(variance_num_uniform)), mean_num_uniform+(2*sqrt(variance_num_uniform)))
+
+area_x_uniform       <- c(interval_uniform[1], mus[mus >= interval_uniform[1] & mus <= interval_uniform[2]], interval_uniform[2])
+area_x_uniform_gauss <- c(interval_uniform_gauss[1], mus[mus >= interval_uniform_gauss[1] & mus <= interval_uniform_gauss[2]], interval_uniform_gauss[2])
+
+area_y_uniform       <- c(0, norm_values[mus >= interval_uniform[1] & mus <= interval_uniform[2]], 0)
+area_y_uniform_gauss <- c(0, norm_gauss_values[mus >= interval_uniform_gauss[1] & mus <= interval_uniform_gauss[2]], 0)
+
+polygon(area_x_uniform, area_y_uniform, col = alpha("blue", 0.25))
+polygon(area_x_uniform_gauss, area_y_uniform_gauss, col = alpha("red", 0.25))
+
+legend("topright", legend = c("Gamma", "Gaussian"), 
+       col = c("blue", "red"), lwd = 2)
+```
+
+```{r}
+gamma_values       <- dgamma(mus, shape = sum(x)+9, rate = length(x)+3)
+gamma_gauss_values <- dnorm(mus, mean = mean_num_gamma, sd = sqrt(variance_num_gamma))
+
+plot(mus, gamma_values,
+     type = "s", col = "blue2", lwd = 2,
+     xlab = expression(mu),
+     ylab = "Posterior Density",
+     main = "Posterior pdf with gamma prior compared with gaussian",
+     xlim = c(1, 5)
+    )
+axis(side = 1, at = seq(1, limit-1, by = 2))
+grid(lty = 2.5, col = "lightgray")
+
+lines(mus, gamma_gauss_values, col = "red2", lwd = 2)
+
+interval_gamma       <- c(lower_bound_gamma, upper_bound_gamma)
+interval_gamma_gauss <- c(mean_num_gamma-(2*sqrt(variance_num_gamma)), mean_num_gamma+(2*sqrt(variance_num_gamma)))
+
+area_x_gamma       <- c(interval_gamma[1], mus[mus >= interval_gamma[1] & mus <= interval_gamma[2]], interval_gamma[2])
+area_x_gamma_gauss <- c(interval_gamma_gauss[1], mus[mus >= interval_gamma_gauss[1] & mus <= interval_gamma_gauss[2]], interval_gamma_gauss[2])
+
+area_y_gamma       <- c(0, gamma_values[mus >= interval_gamma[1] & mus <= interval_gamma[2]], 0)
+area_y_gamma_gauss <- c(0, gamma_gauss_values[mus >= interval_gamma_gauss[1] & mus <= interval_gamma_gauss[2]], 0)
+
+polygon(area_x_gamma, area_y_gamma, col = alpha("blue", 0.25))
+polygon(area_x_gamma_gauss, area_y_gamma_gauss, col = alpha("red", 0.25))
+
+legend("topright", legend = c("Gamma", "Gaussian"), 
+       col = c("blue", "red"), lwd = 2)
+```
+
+# Exercise 2
+
+***A researcher A wants to evaluate the efficiency of detector 2 (Det2). For this purpose, he sets up the apparatus shown in the figure 1, where Det2 is sandwiched between Det1 and Det3. Let n be the number of signals recorded simultaneously by Det1 and Det3, and r be those also recorded by Det2, researcher A obtains n = 500 and r = 312.***
+
+***Assuming a binomial model where n is the number of trials and r is the number of success out of n trials,***
+***a) Evaluate the mean and the variance using a Bayesian approach under the hypothesis of:***
+
+* ***Uniform prior ∼ U(0,1)***
+* ***Jeffrey’s prior ∼ Beta(1/2, 1/2)***
+
+Assuming uniform prior:
+
+```{r}
+# Posterior function
+posterior_uniform <- function(p) {
+  n <- 500
+  r <- 312
+  
+  return(dbinom(r, size = n, prob = p))
+}
+
+# Normalization of the function
+norm_posterior_uniform <- function(p) {
+  return(posterior_uniform(p) / integrate(posterior_uniform, lower = 0, upper = 1)$value)
+}
+
+ps <- seq(0, 1, by = 0.001)  # Generating probability values
+
+mean_value     <- integrate(function(p){p*norm_posterior_uniform(p)}, lower = 0, upper = 1)$value
+variance_value <- integrate(function(p){p*p*norm_posterior_uniform(p)}, lower = 0, upper = 1)$value - mean_value^2
+
+cat(sprintf("Mean: %.4f\n", mean_value))
+cat(sprintf("Variance: %.4f", variance_value))
+```
+
+Assuming Jeffrey's prior:
+
+```{r}
+# Posterior function
+posterior_jeffrey <- function(p) {
+  n <- 500
+  r <- 312
+  
+  return(dbeta(p, shape1 = 0.5, shape2 = 0.5) * dbinom(r, size = n, prob = p))
+}
+
+# Normalization of the function
+norm_posterior_jeffrey <- function(p) {
+  return(posterior_jeffrey(p) / integrate(posterior_jeffrey, lower = 0, upper = 1)$value)
+}
+
+mean_value     <- integrate(function(p){p*norm_posterior_jeffrey(p)}, lower = 0, upper = 1)$value
+variance_value <- integrate(function(p){p*p*norm_posterior_jeffrey(p)}, lower = 0, upper = 1)$value - mean_value^2
+
+cat(sprintf("Mean: %.4f\n", mean_value))
+cat(sprintf("Variance: %.4f", variance_value))
+```
+
+***b) Plot the posterior distributions for both cases***
+
+```{r}
+plot(ps, norm_posterior_uniform(ps),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Posterior Density",
+     main = "Posterior pdf with uniform prior"
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+
+plot(ps, norm_posterior_jeffrey(ps),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Posterior Density",
+     main = "Posterior pdf with Jeffrey's prior"
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+```
+
+***Taking into account that the same detector has been studied by researcher B, who has performed only n = 10 measurements and has obtained r = 10 signals,***
+
+***c) Evaluate the mean, the variance and the posterior distribution using a uniform prior with the results of researcher B.***
+
+```{r}
+# Posterior function
+posterior_uniform_B <- function(p) {
+  n <- 10
+  r <- 10
+  
+  return(dbinom(r, size = n, prob = p))
+}
+
+# Normalization of the function
+norm_posterior_uniform_B <- function(p) {
+  return(posterior_uniform_B(p) / integrate(posterior_uniform_B, lower = 0, upper = 1)$value)
+}
+
+mean_value     <- integrate(function(p){p*norm_posterior_uniform_B(p)}, lower = 0, upper = 1)$value
+variance_value <- integrate(function(p){p*p*norm_posterior_uniform_B(p)}, lower = 0, upper = 1)$value - mean_value^2
+
+cat(sprintf("Mean: %.4f\n", mean_value))
+cat(sprintf("Variance: %.4f", variance_value))
+
+# Plot
+plot(ps, norm_posterior_uniform_B(ps),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Posterior Density",
+     main = "Posterior pdf with uniform prior"
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+```
+
+***d) Repeat the computation of points a) and b) with the data of researcher A using as a prior the posterior obtained from point c).***
+
+Point a):
+
+```{r}
+# Posterior function
+posterior_B <- function(p) {
+  n <- 500
+  r <- 312
+  
+  return(posterior_uniform_B(p) * dbinom(r, size = n, prob = p))
+}
+
+# Normalization of the function
+norm_posterior_B <- function(p) {
+  return(posterior_B(p) / integrate(posterior_B, lower = 0, upper = 1)$value)
+}
+
+ps <- seq(0, 1, by = 0.001)  # Generating probability values
+
+mean_value     <- integrate(function(p){p*norm_posterior_B(p)}, lower = 0, upper = 1)$value
+variance_value <- integrate(function(p){p*p*norm_posterior_B(p)}, lower = 0, upper = 1)$value - mean_value^2
+
+cat(sprintf("Mean: %.4f\n", mean_value))
+cat(sprintf("Variance: %.4f", variance_value))
+```
+
+Point b):
+
+```{r}
+plot(ps, norm_posterior_B(ps),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Posterior Density",
+     main = "Posterior pdf with researcher B prior"
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+```
+
+***e) [Optional] Compute 95% credible interval using the posterior of the previous point d).***
+
+```{r}
+# Searching where we get 2.5% integral value
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(norm_posterior_B, lower = 0, upper = p)$value - 0.025)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    lower_bound <- p
+  }
+}
+
+# Searching where we get 97.5% integral value
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(norm_posterior_B, lower = 0, upper = p)$value - 0.975)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    upper_bound <- p
+  }
+}
+
+cat(sprintf("95%% credible interval: [%.4f,%.4f]", lower_bound, upper_bound))
+```
+
+# Exercise 3
+
+***A coin is flipped n = 30 times with the following outcomes:***
+***T, T, T, T, T, H, T, T, H, H, T, T, H, H, H, T, H, T, H, T, H, H, T, H, T, H, T, H, H, H***
+
+***a) Assuming a flat prior, and a beta prior, plot the likelihood, prior and posterior distributions for the data set.***
+
+A flat prior means a Beta distribution with parameters $\alpha=1$ and $\beta=1$, so both flat prior and beta prior fall under the same formula:
+
+$$g(p)\propto p^{\alpha-1}(1-p)^{\beta-1}$$
+
+Given $x$ successes in $n$ Bernoulli trials the likelihood will be a binomial distribution:
+
+$$f(x|p,n)\propto p^x(1-x)^{n-x}$$
+
+The product gives us the posterior:
+
+$$h(p|x,n)\propto g(p)\cdot f(x|p,n)\propto p^{\alpha-1}(1-p)^{\beta-1}\cdot p^x(1-x)^{n-x}=p^{\alpha-1+x}(1-p)^{\beta-1+n-x}$$
+
+So we get a beta distribution with $\alpha'=\alpha+x$ and $\beta'=\beta+n-x$. Given the fact that we have $x$ and $n$, we only need to choose $\alpha$ and $\beta$ parameters; the flat prior forces us to choose $\alpha=\beta=1$, as said above, but with a general beta prior we have different options: since we expect $0.5$ as the most probable outcome, then we need to have $\alpha=\beta$, and in order to differ from the previous prior we may choose $\alpha=\beta=10$, which gives a more peaked function around $0.5$.
+
+```{r}
+outcomes <- c(0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0, 1, 1, 1, 0, 1, 0, 1, 0, 1, 1, 0, 1, 0, 1, 0, 1, 1, 1)
+ps       <- seq(0, 1, by = 0.001)
+
+likelihood <- sapply(ps, dbinom, x = sum(outcomes), size = length(outcomes))
+likelihood <- likelihood / sum(likelihood)  # Normalization
+
+# Priors and posteriors plots
+plot(ps, dbeta(ps, shape1 = 1, shape2 = 1),
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Probability Density",
+     main = "Posteriors and priors",
+     ylim = c(0, 5.75)
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+
+lines(ps, dbeta(ps, shape1 = 10, shape = 10), col = 'red2', lwd = 2)
+lines(ps, dbeta(ps, shape1 = 1+sum(outcomes), shape = 1+length(outcomes)-sum(outcomes)), col = 'green2', lwd = 2)
+lines(ps, dbeta(ps, shape1 = 10+sum(outcomes), shape = 10+length(outcomes)-sum(outcomes)), col = 'yellow2', lwd = 2)
+
+legend("topright", legend = c("Flat prior", "Beta prior", "Posterior with flat prior", "Posterior with beta prior"), 
+       col = c("blue2", "red2", "green2", "yellow2"), lwd = 2)
+
+# Likelihood plots
+plot(ps, likelihood,
+     type = "s", col = "blue2", lwd = 2,
+     xlab = "p",
+     ylab = "Probability Density",
+     main = "Likelihood"
+    )
+axis(side = 1, at = seq(0.1, 0.9, by = 0.2))
+grid(lty = 2.5, col = "lightgray")
+```
+
+***b) Evaluate the most probable value for the coin probability p and, integrating the posterior probability distribution, give an estimate for a 95% credibility interval.***
+
+```{r}
+most_probable_flat <- which.max(dbeta(ps, shape1 = 1+sum(outcomes), shape = 1+length(outcomes)-sum(outcomes)))
+most_probable_beta <- which.max(dbeta(ps, shape1 = 10+sum(outcomes), shape = 10+length(outcomes)-sum(outcomes)))
+
+cat(sprintf("Most probable value with flat prior: %.2f\n", ps[most_probable_flat]))
+cat(sprintf("Most probable value with beta prior: %.2f", ps[most_probable_beta]))
+```
+
+```{r}
+# Flat prior
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(function(p){dbeta(p, shape1 = 1+sum(outcomes), shape = 1+length(outcomes)-sum(outcomes))}, lower = 0, upper = p)$value - 0.025)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    lower_bound <- p
+  }
+}
+
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(function(p){dbeta(p, shape1 = 1+sum(outcomes), shape = 1+length(outcomes)-sum(outcomes))}, lower = 0, upper = p)$value - 0.975)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    upper_bound <- p
+  }
+}
+
+cat(sprintf("95%% credible interval with flat prior: [%.4f,%.4f]\n", lower_bound, upper_bound))
+
+# Beta prior
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(function(p){dbeta(p, shape1 = 10+sum(outcomes), shape = 10+length(outcomes)-sum(outcomes))}, lower = 0, upper = p)$value - 0.025)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    lower_bound <- p
+  }
+}
+
+minimum_v <- 1
+for(p in ps) {
+  v <- abs(integrate(function(p){dbeta(p, shape1 = 10+sum(outcomes), shape = 10+length(outcomes)-sum(outcomes))}, lower = 0, upper = p)$value - 0.975)
+  if(v < minimum_v) {
+    minimum_v   <- v
+    upper_bound <- p
+  }
+}
+
+cat(sprintf("95%% credible interval with beta prior: [%.4f,%.4f]\n", lower_bound, upper_bound))
+```
+
+***c) Repeat the same analysis assuming a sequential analysis of the data. Show how the most probable value and the credibility interval change as a function of the number of coin tosses (i.e. from 1 to 30).***
+
+```{r}
+one_step_analysis <- function(alpha) {
+  most_probable <- double(length(outcomes))
+  lower_bound   <- double(length(outcomes))
+  upper_bound   <- double(length(outcomes))
+  
+  for(i in 1:length(outcomes)) {
+    partial_outcomes <- outcomes[1:i]
+    
+    most_probable[i] <- ps[which.max(dbeta(ps, shape1 = alpha+sum(partial_outcomes), shape = alpha+length(partial_outcomes)-sum(partial_outcomes)))]
+    
+    minimum_v <- 1
+    for(p in ps) {
+      v <- abs(integrate(function(p){dbeta(p, shape1 = alpha+sum(partial_outcomes), shape = alpha+length(partial_outcomes)-sum(partial_outcomes))}, lower = 0, upper = p)$value - 0.025)
+      if(v < minimum_v) {
+        minimum_v   <- v
+        lower_bound[i] <- p
+      }
+    }
+    
+    minimum_v <- 1
+    for(p in ps) {
+      v <- abs(integrate(function(p){dbeta(p, shape1 = alpha+sum(partial_outcomes), shape = alpha+length(partial_outcomes)-sum(partial_outcomes))}, lower = 0, upper = p)$value - 0.975)
+      if(v < minimum_v) {
+        minimum_v   <- v
+        upper_bound[i] <- p
+      }
+    }
+    
+  }
+  
+  return(list(most_probable = most_probable, lower_bound = lower_bound, upper_bound = upper_bound))
+}
+
+# Flat prior
+results_flat <- one_step_analysis(1)
+
+plot(seq(1, length(outcomes), by = 1), results_flat$most_probable,
+     type = "l", col = "blue2", lwd = 2,
+     xlab = "Coin tosses",
+     ylab = "p",
+     main = "Results with flat prior",
+     ylim = c(0, 1)
+    )
+grid(lty = 2.5, col = "lightgray")
+
+lines(seq(1, length(outcomes), by = 1), results_flat$lower_bound, col = "red2", lwd = 2, lty = 2)
+lines(seq(1, length(outcomes), by = 1), results_flat$upper_bound, col = "red2", lwd = 2, lty = 2)
+
+legend("topright", legend = c("Most probable value", "Credibility interval"), 
+       col = c("blue2", "red2"), lty = c(1, 2), lwd = 2)
+
+# Beta prior
+results_beta <- one_step_analysis(10)
+
+plot(seq(1, length(outcomes), by = 1), results_beta$most_probable,
+     type = "l", col = "blue2", lwd = 2,
+     xlab = "Coin tosses",
+     ylab = "p",
+     main = "Results with beta prior",
+     ylim = c(0, 1)
+    )
+grid(lty = 2.5, col = "lightgray")
+
+lines(seq(1, length(outcomes), by = 1), results_beta$lower_bound, col = "red2", lwd = 2, lty = 2)
+lines(seq(1, length(outcomes), by = 1), results_beta$upper_bound, col = "red2", lwd = 2, lty = 2)
+
+legend("topright", legend = c("Most probable value", "Credibility interval"), 
+       col = c("blue2", "red2"), lty = c(1, 2), lwd = 2)
+```
+
+***d) Do you get a different result, by analysing the data sequentially with respect to a one-step analysis (i.e. considering all the data as a whole) ?***
+
+I get the same result considering the one-step analysis and the data as a whole, because in the end the one-step-analysis converges to the same values obtained in the previous search. The reason for this is that every time the coin is tossed our likelihood is updated and "corrected" to the "direction" pointed by the sample taken all together and analyzed in one step.
+
+# Exercise 4
+
+***A couple of days before an election in which four parties (A,B,C,D) compete, a poll is taken using a sample of 200 voters who express the following preferences 57, 31,45 and 67 for, respectively, parties A,B,C and D.***
+***Using a Bayesian approach, for all parties calculate the expected percentage of votes and a 68% credibility interval by assuming as prior a***
+* ***uniform prior***
+* ***a prior constructed from the results obtained from another poll conducted the previous week on a sample of 100 voters who expressed the following preferences 32,14,26,28 for, respectively, parties A,B,C and D.***
+
+This is a multinomial problem, so in the case of a uniform prior the posterior will be:
+
+$$h\left(p_1,p_2,p_3,p_4|x_1,x_2,x_3,x_4\right)=g\left(p_1,p_2,p_3,p_4\right)\cdot f\left(x_1,x_2,x_3,x_4|p_1,p_2,p_3,p_4\right)\propto p_1^{x_1}p_2^{x_2}p_3^{x_3}p_4^{x_4}$$
+
+This distribution resembles a beta distribution in a multidimensional space, which is called Dirichlet distribution:
+
+$$Dirichlet\left(x_1,\dots,x_n|\alpha_1,\dots,\alpha_n\right)\propto x_1^{\alpha_1-1}\cdot\dotsc\cdot x_n^{\alpha_n-1}$$
+
+So we have the same distribution with $\alpha_i=x_i+1$. From literature we know that the expected values are
+
+$$E\left(p_i\right)=\frac{\alpha_i}{\alpha}$$
+
+being $\alpha=\sum\limits_{i=1}^n\alpha_i$.
+
+In order to evaluate the confidence interval we can approximate each distribution along its dimension with a gaussian, assuming enough data for each of them; in this approximation the $68\%$ means $1\sigma$ distance from the expected value, that can be evaluated from the variance given by
+
+$$var\left(x_i\right)=\frac{\left(\alpha-\alpha_i\right)\alpha_i}{\alpha^2(\alpha+1)}$$
+
+```{r}
+# Data
+votes   <- c(57, 31, 45, 67)
+parties <- c('A', 'B', 'C', 'D')
+
+# Parameters
+alphas <- votes + 1
+
+# Expected values
+expected_percentages <- alphas / sum(alphas)
+
+# Variances
+var <- ((sum(alphas) - alphas) * alphas) / (sum(alphas)^2 * (sum(alphas) + 1))
+
+# Bounds of the confidence intervals
+lower_bounds <- expected_percentages - sqrt(var)
+upper_bounds <- expected_percentages + sqrt(var)
+
+# Print of the results
+for(i in 1:length(votes)) {
+  cat(sprintf("Expected pertange of votes for party %s: %.2f%%\n", parties[i], expected_percentages[i] * 100))
+  cat(sprintf("68%% credibility interval: %.2f%% - %.2f%%\n\n", lower_bounds[i] * 100, upper_bounds[i] * 100))
+}
+```
+
+Considering the previous poll the posterior will be:
+
+$$h\left(p_1,p_2,p_3,p_4|x_1,x_2,x_3,x_4\right)\propto p_1^{x_1'}p_2^{x_2'}p_3^{x_3'}p_4^{x_4'}\cdot p_1^{x_1}p_2^{x_2}p_3^{x_3}p_4^{x_4}=p_1^{x_1'+x_1}p_2^{x_2'+x_2}p_3^{x_3'+x_3}p_4^{x_4'+x_4}$$
+
+So we just need to add those votes to the previous data.
+
+```{r}
+# Prior data
+previous_votes <- c(32, 14, 26, 28)
+
+# New parameters
+new_alphas <- alphas + previous_votes
+
+# Expected values
+expected_percentages <- new_alphas / sum(new_alphas)
+
+# Variances
+var <- ((sum(new_alphas) - new_alphas) * new_alphas) / (sum(new_alphas)^2 * (sum(new_alphas) + 1))
+
+# Bounds of the confidence intervals
+lower_bounds <- expected_percentages - sqrt(var)
+upper_bounds <- expected_percentages + sqrt(var)
+
+# Print of the results
+for(i in 1:length(votes)) {
+  cat(sprintf("Expected pertange of votes for party %s: %.2f%%\n", parties[i], expected_percentages[i] * 100))
+  cat(sprintf("68%% credibility interval: %.2f%% - %.2f%%\n\n", lower_bounds[i] * 100, upper_bounds[i] * 100))
+}
+```
+
+***Calculate also the sample size to obtain a margin of error less or equal than ±3% for each party***
+
+The formula we need to use in this case is the following:
+
+$$
+n_i = \frac{(\Phi^{-1}(1 - \alpha/2))^2 \cdot \hat{p_i} \cdot (1 - \hat{p_i})}{(\text{Margin of Error})^2}
+$$
+
+where $\alpha$ is the significance level, $\hat{p}_i$ is the proportion of the successes with respect to trials (in our case votes with respect to the total) and the margin of error is the $0.03$ required by the text.
+
+Fixing $\alpha=0.05$ we have:
+
+```{r}
+significance    <- 0.05
+proportions     <- votes / sum(votes)
+margin_of_error <- 0.03
+
+samples_sizes <- double(length(parties))
+
+for (i in 1:length(samples_sizes)) {
+  samples_sizes[i] <- (qnorm(1-(significance/2))^2 * proportions[i] * (1-proportions[i])) / (margin_of_error)^2
+}
+
+for (i in 1:length(samples_sizes)) {
+  cat(sprintf("Samples size for party %s: %d\n", parties[i], floor(samples_sizes[i])))
+}
+```

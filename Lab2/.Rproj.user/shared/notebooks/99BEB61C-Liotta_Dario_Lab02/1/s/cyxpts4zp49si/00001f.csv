@@ -1,0 +1,2 @@
+"0",""
+"0","abline(v = mean(sampled_data), col = ""red"", lty = 2, lw = 1.5)"

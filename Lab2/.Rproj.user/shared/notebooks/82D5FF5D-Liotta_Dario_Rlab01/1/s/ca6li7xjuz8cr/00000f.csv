@@ -1,0 +1,7 @@
+"0","ggplot(dataset_filtered, aes(x = tripduration / 60.00)) +"
+"0","       geom_histogram(bins = 30, color = ""steelblue"", fill = ""skyblue"", alpha = 0.7) +   # Number of bins is arbitraly chosen"
+"0","       labs(title = ""Distribution of trip duration"","
+"0","            x     = ""Trip Duration (minutes)"","
+"0","            y     = ""Frequency"") +"
+"0","       theme_minimal() +"
+"0","       theme(plot.title = element_text(hjust = 0.5))  # To center the title"

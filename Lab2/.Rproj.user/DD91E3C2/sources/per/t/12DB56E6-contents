@@ -1,0 +1,285 @@
+---
+title: "Liotta_Dario_Lab02"
+output:
+  pdf_document: default
+  html_document: default
+date: "2024-04-18"
+---
+
+# Exercise 1.
+
+### 1) Write the R functions for the probability density and cumulative distribution functions, using the R naming convention.
+
+```{r}
+# Probability Density Function
+dztpois <- function(k, lambda) {
+  p_k <- (lambda^k * exp(-lambda)) / (factorial(k) * (1 - exp(-lambda)))
+  return(p_k)
+}
+
+# Cumulative Density Function
+pztpois <- function(k, lambda) {
+  
+  p_sum <- 0
+  for (i in 1:k) {
+    p_sum <- p_sum + dztpois(i, lambda)
+  }
+  
+  return(p_sum)
+  
+}
+```
+
+### 2) Produce two plots showing the pdf and cdf, separately.
+
+```{r}
+lambda <- 1.4   # Fixing lambda
+
+k <- 1:30       # I arbitraly choose the range from 1 to 30
+
+# PDF plot
+plot(k, dztpois(k, lambda), type = "s", lwd = 2, col = "blue",
+     xlab = "k", ylab = "Probability density",
+     main = "PDF of zero-truncated Poisson distribution")
+grid()
+
+# CDF plot
+cdf_values <- double(length(k))
+
+for (i in 1:length(k)) {
+  cdf_values[i] <- pztpois(k[i], lambda)
+}
+
+plot(k, cdf_values, type = "s", lwd = 2, col = "blue",
+     xlab = "k", ylab = "Cumulative density",
+     main = "CDF of zero-truncated Poisson distribution"
+     )
+grid()
+```
+
+### 3) Compute the mean value and variance of the probability distribution using R.
+
+```{r}
+mean_value <- sum(k * dztpois(k, lambda))
+print(sprintf("Mean: %f", mean_value))
+
+std_value <- sum(k^2 * dztpois(k, lambda)) - mean_value^2
+print(sprintf("Variance: %f", std_value))
+```
+
+### 4) Generate a sample of random numbers from this distribution and show them in an histogram. Evaluate the sample mean.
+
+```{r}
+sampled_data <- sample(k, size = 1000, replace = TRUE, prob = dztpois(k, lambda))
+
+hist(sampled_data,
+     breaks = seq(min(sampled_data), max(sampled_data), by = 1),
+     main   = "Histogram of sampled data",
+     xlab   = "k",
+     ylab   = "Frequency",
+     col    = "lightblue"
+    )
+
+abline(v = mean(sampled_data), col = "red", lty = 2, lw = 1.5)
+legend("topright", legend = sprintf("Sample mean = %.3f", mean(sampled_data)), col = "red", lty = 2, lw = 1.5)
+```
+
+# Exercise 2.
+
+### a) Compute the normalisation factor N using R.
+
+In order to normalize we need to set
+
+$$\int_0^{\infty}p(E)dE=1 \ \longrightarrow \ N\left(\int_0^{E_0}dE+\int_{E_0}^{\infty}\left(E-E_0+1\right)^{-\gamma}dE\right)=1$$
+
+So we can evaluate the two integrals, sum them together and set $N$ equal to $1$ over that sum.
+
+```{r}
+# Setting constants
+E0    <- 7.25
+gamma <- 2.7
+
+# Defining the function only for E>E0
+pE <- function(E) {
+  return((E - E0 + 1)^(-gamma))
+}
+
+# integrate() returns the integral in the specified interval
+integral <- integrate(pE, lower = E0, upper = Inf)$value
+
+# The first integral trivially results E0
+N <- 1 / (E0 + integral)
+print(sprintf("Normalization factor: %f", N))
+```
+
+### b) Plot the probability density function in R.
+
+```{r}
+# Normalized function in the complete domain
+norm_pE <- function(E) {
+  if (E < E0) {
+    return(N)
+  }
+  else {
+    return(N * (E - E0 + 1)^(-gamma))
+  }
+}
+
+E_values <- seq(from = 0, to = 15, length = 1000)
+
+pE_values <- double(length(E_values))
+
+for (i in 1:length(E_values)) {
+  pE_values[i] <- norm_pE(E_values[i])
+}
+
+plot(E_values, pE_values, type = "l", lwd = 2, col = "blue",
+     xlab = "E", ylab = "Probability density",
+     main = "Probability density function"
+     )
+```
+
+### c) Plot the cumulative density function in R.
+
+```{r}
+# In order to integrate norm_pE() I need to redefine it considering only the second interval
+norm_pE <- function(E) {
+  return(N * (E - E0 + 1)^(-gamma))
+}
+
+# Cumulative density function
+cdf <- function(x) {
+  if (x < E0) {
+    return(N * x)   # Because integral of Ndx gives us Nx
+  }
+  else {
+    return((N * E0) + integrate(norm_pE, lower = E0, upper = x)$value)   # We need to add the integral from 0 to E0, which is NE0
+  }
+}
+
+cdf_values <- double(length(E_values))
+
+for (i in 1:length(E_values)) {
+  cdf_values[i] <- cdf(E_values[i])
+}
+
+plot(E_values, cdf_values, type = "l", lwd = 2, col = "blue",
+     xlab = "E", ylab = "Cumulative density",
+     main = "Cumulative density function"
+     )
+```
+
+### d) Compute the mean value using R
+
+```{r}
+evaluate_meanE1 <- function(E) {
+  return(E * N)
+}
+
+evaluate_meanE2 <- function(E) {
+  return(E * N * (E - E0 + 1)^(-gamma))
+}
+
+meanE <- integrate(evaluate_meanE1, lower = 0, upper = E0)$value + integrate(evaluate_meanE2, lower = E0, upper = Inf)$value
+print(sprintf("Mean value: %f", meanE))
+```
+
+### e) Generate $10^6$ random numbers from this distribution, show them in an histogram and superimpose the pdf (with a line or with a sufficient number of points).
+
+I need to invert the cumulative density function in order to extract points according to our probability density function. Our PDF is
+
+$$PDF(E)=\begin{cases}N \hspace{0.5cm} &E<E_0\\ N\left(E-E_0+1\right)^{-\gamma} & E\geqslant E_0\end{cases}$$
+
+We integrate both parts:
+
+$$\int_0^ENdE'=NE$$
+$$\int_0^{E_0}NdE+\int_{E_0}^EN\left(E'-E_0+1\right)^{-\gamma}dE'=NE_0+\frac{N\left(E'-E_0+1\right)^{1-\gamma}}{1-\gamma}\Bigg|_{E_0}^E=NE_0+\frac{N\left(E-E_0+1\right)^{1-\gamma}}{1-\gamma}-\frac{N}{1-\gamma}$$
+
+So we get the following CDF:
+
+$$CDF(E)=\begin{cases}NE \hspace{0.5cm} &E<E_0\\ N\left[\frac{\left(E-E_0+1\right)^{1-\gamma}-1}{1-\gamma}+E_0\right] &E\geqslant E_0\end{cases}$$
+
+First we invert the first part; setting $CDF(E)=y$ we have
+
+$$y=NE \ \iff \ E=\frac{y}{N}$$
+
+Since the maximum value of $CDF(E)$ in that interval is $NE_0$ then the interval of this piece goes from $0$ to $NE_0$.
+
+Isolating $E$ also from the second part (I'm skipping steps here) we get the inverse function of the $CDF$:
+
+$$ICDF(y)=\begin{cases}\frac{y}{N} \hspace{0.5cm} &y<NE_0\\ \left[(1-\gamma)\left(\frac{y}{N}-E_0\right)+1\right]^{\frac{1}{1-\gamma}}+E_0-1 &NE_0\leqslant y\leqslant1\end{cases}$$
+
+Now we can finally definire $ICDF$ and plot the histogram.
+
+```{r}
+n_points = 10^6
+
+# Inverse cumulative density function
+icdf <- function(y) {
+  if (y < N * E0) {
+    return(y / N)
+  }
+  else if (y >= N * E0 & y <= 1) {
+    A <- ((1 - gamma) * ((y / N) - E0)) + 1
+    return(A^(1 / (1 - gamma)) + E0 - 1)
+  }
+}
+
+# Generation of numbers from our distribution
+random_numbers <- numeric(n_points)
+
+for (i in 1:length(random_numbers)) {
+  random_numbers[i] = icdf(runif(1))
+}
+
+# Histogram
+hist(random_numbers,
+     breaks      = 10^4,
+     xlim        = c(0, 15),
+     main        = "Histogram of sampled points",
+     xlab        = "k",
+     ylab        = "Frequency",
+     col         = "lightblue",
+     probability = TRUE
+    )
+
+# Superimposing the PDF
+lines(E_values, pE_values, type = "l", lwd = 2, col = "blue")
+legend("topright", legend = "Probability density function", col = "blue", lty = 1, lwd = 2)
+```
+
+# Exercise 3.
+
+```{r}
+print(1-ppois(5, 2))
+
+# Average number of accidents (lambda)
+lambda <- 2
+
+# Threshold for at least 5 accidents (k)
+k <- 5
+
+# Calculate probability using Poisson distribution
+p_poisson <- 1 - ppois(lambda, k)  # Probability of k or more accidents
+
+# Print results
+cat("Bound from Markov's inequality:", 1 - (lambda / k), "\n")
+cat("Probability using Poisson distribution:", p_poisson)
+```
+
+# Exercise 4.
+
+```{r}
+mu <- 7    # mean waiting period in days
+sigma <- 2 # standard deviation of waiting period in days
+confidence_level <- 0.95  # Helen wants to be 95% sure
+
+# Find the z-score corresponding to the 95th percentile
+z_score <- qnorm(confidence_level)
+
+# Calculate the number of days Helen should order the book early
+days_early <- mu + z_score * sigma
+
+# Print the result
+cat("Helen should order the book", round(days_early, 2), "days early to be 95% sure she receives it by the certain date.")
+```
