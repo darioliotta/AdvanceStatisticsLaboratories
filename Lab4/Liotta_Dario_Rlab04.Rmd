@@ -5,40 +5,116 @@ date: "2024-05-16"
 ---
 
 ```{r}
-where_does_integrate <- function(f, x_value, lower = 0, upper = 1) {
-  
-  xs <- c(lower, upper, by = 10^(-6))
-  vs <- double(length(xs))
-  
-  for(i in 1:length(vs)) {
-    vs[i] = f(xs[i])
-  }
-  
-  integral_values <- cumsum(vs)
-  
-  minimum_v <- xs[length(xs)]
-  for(i in 1:length(integral_values)) {
-    v <- abs(integral_values[i] - x_value)
-    if(v < minimum_v) {
-      minimum_v   <- v
-      lower_bound <- xs[i]
-    }
-  }
-  
-  return(lower_bound)
-  
-}
+library(scales)
 ```
+
+# Exercise 1
+
+***(a) what is the probability distribution of y, the number of times the new method fails to detect the disease ?***
+
+The probability distribution of the number of times the new method fails to detect the disease follows a Binomial distribution, since the phenomenon allows a yes/no answer (binary outcome).
+
+***(b) on the n = 75 patients sample, the new method fails to detect the disease in y = 6 cases. What is the frequentist estimator of the failure probability of the new method ?***
+
+The frequentist estimator for the probability of failure is
+
+$$p_f=\frac{y}{n}$$
+
+```{r}
+n <- 75
+y <- 6
+
+p_f <- y / n
+
+cat(sprintf("Frequentist estimator of the failure probability: %.0f%%", p_f * 100))
+```
+
+***(c) set up a bayesian computation of the posterior probability, assuming a beta distribution with mean value 0.15 and standard deviation 0.14. Plot the posterior distribution for y, and mark on the plot the mean value and variance***
+
+Given the mean $\mu$ and the standard deviation $\sigma$ of the Beta distribution we can evaluate the parameters $\alpha$ and $\beta$ with the following formulas:
+
+$$\alpha=\frac{\mu^2(1-\mu)}{\sigma^2}-\mu \hspace{2cm} \beta=\frac{\mu(1-\mu)^2}{\sigma^2}+\mu-1$$
+
+```{r}
+mu    <- 0.15
+sigma <- 0.14
+
+alpha_prior <- ((mu^2 * (1-mu)) / (sigma^2)) - mu
+beta_prior  <- ((mu * (1-mu)^2) / (sigma^2)) + mu - 1
+```
+
+A Beta prior $B(p|\alpha,\beta)$ and a Bernoulli likelihood $Binom(y|n,p)$ will produce a Beta posterior $B(p|\alpha',\beta')$ with
+
+$$\alpha'=\alpha+y \hspace{2cm} \beta'=\beta+n-y$$
+
+```{r}
+alpha_posterior <- alpha_prior + y
+beta_posterior  <- beta_prior  + n - y
+```
+
+Now we can plot and calculate mean and standard deviation.
+
+```{r}
+ps <- seq(0, 1, by = 10^(-4))
+
+plot(ps, dbeta(ps, alpha_posterior, beta_posterior),
+     type = "l", lwd = 2, col = "blue",
+     xlab = "p", ylab = "Probability density",
+     main = "Posterior pdf"
+    )
+grid()
+
+mean_posterior     <- alpha_posterior / (alpha_posterior + beta_posterior)
+variance_posterior <- (alpha_posterior * beta_posterior) / ((alpha_posterior + beta_posterior)^2 * (alpha_posterior + beta_posterior + 1))
+
+segments(mean_posterior, 0, mean_posterior, dbeta(mean_posterior, alpha_posterior, beta_posterior), lwd = 2, lty = 2, col = "red")
+mtext(expression(bar(p)), side = 1, line = 0.5, at = mean_posterior, col = "red", cex = 1.2)
+
+x_value_sigma <- which.min(abs(ps - (mean_posterior + sqrt(variance_posterior))))
+arrows(mean_posterior, dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior), ps[x_value_sigma], dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior), code = 3, col = "red", lwd = 1.2, length = 0.075)
+text((mean_posterior + ps[x_value_sigma]) / 2, dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior) - 0.8, expression(sigma), col = "red")
+```
+
+***(d) Perform a test of hypothesis assuming that if the probability of failing to the detect the disease in ill patients is greater or equal than 15%, the new test is no better that the traditional method. Test the sample at a 5% level of significance in the Bayesian way.***
+
+***(e) Perform the same hypothesis test in the classical frequentist way.***
 
 # Exercise 2
 
 ***(a) find the posterior distribution, the posterior mean and standard deviation***
 
+The likelihood is given by the product of the gaussians function:
+
+$$f\left(x_1,x_2,\dots, x_n\right|\mu)\propto e^{-\frac{\left(x_1-\mu\right)^2}{2\sigma^2}}\cdot e^{-\frac{\left(x_2-\mu\right)^2}{2\sigma^2}}\cdot\dotsc\cdot e^{-\frac{\left(x_n-\mu\right)^2}{2\sigma^2}}$$
+
+Summing all the expontents:
+
+$$-\frac{1}{2\sigma^2}\left[\left(x_1-\mu\right)^2+\left(x_2-\mu\right)^2+\dotsc+\left(x_n-\mu\right)^2\right]=-\frac{1}{2\sigma^2}\left[x_1^2-2\mu x_1+\mu^2+\dotsc+x_n^2-2\mu x_n+\mu^2\right]$$
+
+So the exponent will be:
+
+$$-\frac{1}{2\sigma^2}\left[\left(x_1^2+\dotsc x_n^2\right)-2\mu\left(x_1+\dotsc x_n\right)+n\mu^2\right]=-\frac{n}{2\sigma^2}\left[\frac{x_1^2+\dotsc x_n^2}{n}-2\mu\bar{x}+\mu^2\right]$$
+
+Summing and subtracting $\bar{y}^2$:
+
+$$-\frac{n}{2\sigma^2}\left[\frac{x_1^2+\dotsc x_n^2}{n}-\bar{y}^2+\bar{y}^2-2\mu\bar{x}+\mu^2\right]=-\frac{n}{2\sigma^2}\left[\frac{x_1^2+\dotsc x_n^2}{n}-\bar{y}^2\right]-\frac{n}{2\sigma^2}\left(\bar{y}-\mu\right)^2$$
+
+Considering only the term dependent by $\mu$:
+
+$$f\left(x_1,x_2,\dots, x_n\right|\mu)\propto e^{-\frac{\left(\bar{y}-\mu\right)^2}{2\left(\frac{\sigma}{\sqrt{n}}\right)^2}}$$
+
+which corresponds to a gaussian where $\bar{y}$ is the variable, $\mu$ is the mean value and $\frac{\sigma}{\sqrt{n}}$ the standard deviation.
+
+Having identified the likelihood, we can now proceed with the calculations.
+
 ```{r}
+# Fixing the precision of calculations
 precision <- 10^(-5)
 
+# Data
 data <- c(4.09, 4.68, 1.87, 2.62, 5.58, 8.68, 4.07, 4.78, 4.79, 4.49, 5.85, 5.09, 2.40, 6.27, 6.30, 4.47)
 
+# Prior function
 prior <- function(mu) {
   if(mu == 0) {
     mu <- precision
@@ -58,20 +134,23 @@ prior <- function(mu) {
   }
 }
 
+# Posterior function
 posterior <- function(mu) {
   variance <- 4
   return(prior(mu) * dnorm(mean(data), mean = mu, sd = sqrt(variance / length(data))))
 }
 
+# x values
 mus <- seq(0, 12, by = precision)
-vs  <- double(length(mus))
 
+# Posterior values
+vs  <- double(length(mus))
 for(i in 1:length(mus)) {
   vs[i] <- posterior(mus[i])
 }
+vs <- vs / sum(vs)   # Normalization
 
-vs <- vs / sum(vs)
-
+# Plot
 plot(mus, vs, 
      type = "l", lwd = 2, col = "blue",
      xlab = expression(mu), ylab = "Probability density",
@@ -79,11 +158,83 @@ plot(mus, vs,
     )
 grid()
 
+# Posterior mean
 posterior_mean <- sum(mus * vs)
 cat(sprintf("Posterior mean: %.3f\n", posterior_mean))
 
+# Posterior standard deviation
 posterior_variance <- sum((mus - posterior_mean)^2 * vs)
 cat(sprintf("Posterior standard deviation: %.3f\n", sqrt(posterior_variance)))
+```
+
+***(b) find the 95% credibility interval for μ***
+
+```{r}
+# Integral values with cumsum() function
+integral_values <- cumsum(vs)
+
+value_of_025 <- mus[which.min(abs(integral_values - 0.025))]
+value_of_975 <- mus[which.min(abs(integral_values - 0.975))]
+
+cat(sprintf("95%% credibility interval: [%.6f, %.6f]", value_of_025, value_of_975))
+```
+
+***(c) plot the posterior distribution, indicating on the same plot: the mean value, the standard deviation, and the 95% credibility interval***
+
+```{r}
+# Plot of the function
+plot(mus, vs, 
+     type = "l", lwd = 2, col = "blue",
+     xlab = expression(mu), ylab = "Probability density",
+     main = "Posterior pdf"
+    )
+grid()
+
+# Plot of the mean value
+segments(posterior_mean, 0, posterior_mean, vs[which.min(abs(mus - posterior_mean))], lwd = 2, lty = 2, col = "red")
+mtext(expression(bar(mu)), side = 1, line = 0.5, at = posterior_mean, col = "red", cex = 1.2)
+
+# Plot of the standard deviation
+x_value_sigma <- which.min(abs(mus - (posterior_mean + sqrt(posterior_variance))))
+arrows(posterior_mean, vs[x_value_sigma], mus[x_value_sigma], vs[x_value_sigma], code = 3, col = "red", lwd = 1.2, length = 0.075)
+text((posterior_mean + mus[x_value_sigma]) / 2, vs[x_value_sigma] - 5*10^(-7), expression(sigma), col = "red")
+
+# Plot of the 95% credibility interval
+area_x <- c(value_of_025, mus[mus >= value_of_025 & mus <= value_of_975], value_of_975)
+area_y <- c(0, vs[mus >= value_of_025 & mus <= value_of_975], 0)
+polygon(area_x, area_y, col = alpha("blue", 0.25))
+legend("topright", legend = "95% credibility interval", fill = alpha("blue", 0.25), border = "black")
+```
+
+***(d) plot, on the same graph, the prior, the likelihood and the posterior distribution***
+
+```{r}
+# Prior values
+prior_values <- double(length(mus))
+for(i in 1:length(mus)) {
+  prior_values[i] <- prior(mus[i])
+}
+prior_values <- prior_values / sum(prior_values)   # Normalization
+
+#Plot of the posterior
+plot(mus, vs, 
+     type = "l", lwd = 2, col = "blue",
+     xlab = expression(mu), ylab = "Probability density",
+     main = "Probability density functions"
+    )
+grid()
+
+# Plot of the prior
+lines(mus, prior_values, lwd = 2, col = "red")
+
+#Plot of the likelihood
+variance          <- 4
+likelihood_values <- sapply(mus, dnorm, x = mean(data), sd = sqrt(variance / length(data)))
+likelihood_values <- likelihood_values / sum(likelihood_values)
+lines(mus, likelihood_values, lwd = 2, col = "green")
+
+legend("topright", legend = c("Prior", "Likelihood", "Posterior"), 
+       col = c("red", "green", "blue"), lwd = 2)
 ```
 
 # Exercise 3
@@ -146,7 +297,7 @@ six_boxes_toy_model <- function(n_boxes, n_extractions) {
        main = "Probability change with extractions",
        xlab = "Number of extraction",
        ylab = "Probability",
-       xlim = c(0, n_extractions+6),
+       xlim = c(0, n_extractions+7),
        ylim = c(0, 1.1)
       )
   grid()
