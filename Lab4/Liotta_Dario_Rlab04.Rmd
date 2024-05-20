@@ -70,14 +70,89 @@ variance_posterior <- (alpha_posterior * beta_posterior) / ((alpha_posterior + b
 segments(mean_posterior, 0, mean_posterior, dbeta(mean_posterior, alpha_posterior, beta_posterior), lwd = 2, lty = 2, col = "red")
 mtext(expression(bar(p)), side = 1, line = 0.5, at = mean_posterior, col = "red", cex = 1.2)
 
-x_value_sigma <- which.min(abs(ps - (mean_posterior + sqrt(variance_posterior))))
-arrows(mean_posterior, dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior), ps[x_value_sigma], dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior), code = 3, col = "red", lwd = 1.2, length = 0.075)
-text((mean_posterior + ps[x_value_sigma]) / 2, dbeta(ps[x_value_sigma], alpha_posterior, beta_posterior) - 0.8, expression(sigma), col = "red")
+sigma_value <- mean_posterior + sqrt(variance_posterior)
+arrows(mean_posterior, dbeta(sigma_value, alpha_posterior, beta_posterior), sigma_value, dbeta(sigma_value, alpha_posterior, beta_posterior), code = 3, col = "red", lwd = 1.2, length = 0.075)
+text((mean_posterior + sigma_value) / 2, dbeta(sigma_value, alpha_posterior, beta_posterior) - 0.8, expression(sigma), col = "red")
 ```
 
 ***(d) Perform a test of hypothesis assuming that if the probability of failing to the detect the disease in ill patients is greater or equal than 15%, the new test is no better that the traditional method. Test the sample at a 5% level of significance in the Bayesian way.***
 
+We want to test the null hypothesis $H_0$, which corresponds to the fact that the probability of failing to detect the disease in ill patients is greater or equal to $15%$:
+
+$$H_0:p\geqslant0.15$$
+
+The alternative hypothesis $H_1$ states the opposite:
+
+$$H_1:p<0.15$$
+
+In order to evaluate the posterior probability of the null hypothesis we need to integrate over the region $[0.15,1]$, and if the result is smaller than $\alpha=0.05$ it means we will reject the null hypothesis.
+
+```{r}
+probH0 <- integrate(function(p){dbeta(p, alpha_posterior, beta_posterior)}, lower = 0.15, upper = 1)
+cat(sprintf("Posterior probability of the null hypothesis: %.2f", probH0$value))
+
+plot(ps, dbeta(ps, alpha_posterior, beta_posterior),
+	   type = 'l', lwd = 2, col = "blue",
+     xlab = "p", ylab = "Probability density",
+     main = "Posterior pdf",
+	   xlim = c(0, 0.3)
+    )
+grid()
+
+polygon(c(ps[ps >= 0.15], 0.15),
+	      c(dbeta(ps, alpha_posterior, beta_posterior)[ps >= 0.15], 0),
+        col = "red",
+        border = 1,
+        text(x = 0.2, y = 2, sprintf("Area = %.2f", probH0$value), col = "red3")
+       )
+```
+
+Based on the Bayesian hypothesis test, there is sufficient evidence at the 5% significance level to conclude that the probability of failing to detect the disease in ill patients is less than 15%. Hence, the new test is statistically significantly better than the traditional method.
+
 ***(e) Perform the same hypothesis test in the classical frequentist way.***
+
+Let's evaluate the p-value:
+
+```{r}
+p_value <- pbinom(y, n, 0.15)
+cat(sprintf("P-value: %.2f%%", p_value * 100))
+```
+
+We can also visualize the result:
+
+```{r}
+probabilities <- pbinom(seq(0, 8, 1), n, 0.15)
+
+colors    <- rep("lightblue", length(probabilities))
+colors[7] <- "red"
+
+barplot(probabilities,
+        ylim = c(0, 0.23),
+        main = "Cumulative binomial distirbution",
+        xlab = "y",
+        ylab = "Cumulative probability",
+        col = colors,
+        border = "darkblue",
+        names.arg = seq(0, 8, 1),
+        las = 1,
+        cex.names = 0.8,
+        cex.axis = 0.8,
+        cex.lab = 0.8,
+        cex.main = 0.9
+)
+grid(nx = NULL, ny = NULL, col = "gray", lty = "dotted")
+
+text(seq(1, length(probabilities), 1), probabilities + 0.01, 
+     labels = round(probabilities, 3), 
+     cex = 0.7, 
+     col = "blue")
+
+abline(h = 0.05, col = "orange", lty = "dashed", lwd = 2)
+
+legend("topleft", legend = "Acceptance", lty = "dashed", lwd = 2, col = "orange")
+```
+
+In this case the null hypothesis can't be rejected, so with this approach we can't say if the new test is better than the old one.
 
 # Exercise 2
 
