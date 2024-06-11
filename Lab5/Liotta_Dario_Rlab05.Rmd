@@ -1,0 +1,318 @@
+---
+title: "Liotta_Dario_Rlab05"
+output:
+  html_document: default
+  pdf_document: default
+date: "2024-06-04"
+---
+
+```{r}
+library(ggplot2)
+library(coda)
+library(rjags)
+```
+
+# Exercise 1
+
+```{r}
+# g function (not normalized)
+g_unscaled <- function(theta) {
+  return(0.5 * exp(-0.5 * (theta + 3)^2) + 0.5 * exp(-0.5 * (theta - 3)^2))
+}
+
+# Integral of g (normalizing term)
+int_g <- integrate(g_unscaled, lower = -Inf, upper = Inf)$value
+
+# g function normalized
+g <- function(x) {
+  g_unscaled(x) / int_g
+}
+
+# Q function (gaussian)
+Q <- function(x, theta) {
+  return(dnorm(x, theta, 1))  # I arbitrarily chose sd=1
+}
+
+# Metropolis-Hastings algorithm
+metropolis_hastings <- function(n_samples, target, proposal, theta_0) {
+  
+  thetas    <- numeric(n_samples)   # Inizializing the vector with thetas
+  thetas[1] <- theta_0              # Fixing initial value
+  
+  for (t in 2:n_samples) {
+    theta_t <- thetas[t-1]
+    s       <- proposal(theta_t)    # Extracting value
+    
+    acceptance_ratio <- min(1, (target(s) * Q(theta_t, s)) / (target(theta_t) * Q(theta_t, s)))
+    
+    u <- runif(1)
+    if (u < acceptance_ratio) {
+      thetas[t] <- s
+    }
+    else {
+      thetas[t] <- theta_t
+    }
+  }
+  
+  return(thetas)
+  
+}
+
+# Proposal function
+proposal <- function(theta) {
+  return(rnorm(1, mean = theta, sd = 1))
+}
+
+theta_0   <- 0
+n_samples <- 10^5
+
+samples <- metropolis_hastings(n_samples, g, proposal, theta_0)
+samples_df <- data.frame(sample = as.numeric(samples))
+
+ggplot(samples_df, aes(x = sample)) +
+    geom_histogram(aes(y = ..density..), bins = 50, fill = "green", alpha = 0.5) +
+    stat_function(fun = g, color = "red", size = 1, linetype = "dashed") +
+    ggtitle("Distribution sampled with Metropolis-Hastings") +
+    xlab(expression(theta)) +
+    ylab("Probability density") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# Autocorrelation function
+
+mcmc_chain <- mcmc(samples)
+
+lags <- seq(0, 500, by = 10)
+autocorr_chain <- autocorr(mcmc_chain, lags = lags)
+
+autocorr_data <- data.frame(lags = lags, autocorrelation = as.numeric(autocorr_chain))
+
+ggplot(autocorr_data, aes(x = lags, y = autocorrelation)) +
+  geom_point(color = "blue") +
+  geom_line(color = "blue", size = 1) +
+  ggtitle("Autocorrelation of the chain") +
+  xlab("Lags") +
+  ylab("Autocorrelation") +
+  theme_minimal() +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+```{r}
+# List of different values per parameters
+burn_in_values <- c(1000, 2000, 5000)
+thin_values <- c(1, 5, 10)
+
+plot_results <- function(samples, burn_in, thin) {
+  
+  samples_burned_thinned <- window(mcmc(samples), start = burn_in, thin = thin)
+  samples_df <- data.frame(sample = as.numeric(samples_burned_thinned))
+  
+  # Distribution plot
+  p1 <- ggplot(samples_df, aes(x = sample)) +
+    geom_histogram(aes(y = ..density..), bins = 50, fill = "green", alpha = 0.5) +
+    stat_function(fun = g, color = "red", size = 1, linetype = "dashed") +
+    ggtitle(paste("Burn-in:", burn_in, "Thin:", thin)) +
+    xlab("Theta") +
+    ylab("Density") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p1)
+  
+  ls <- seq(0, 500, by = 10)
+  autocorr_chain <- autocorr(samples_burned_thinned, lags = ls)
+  autocorr_data <- data.frame(lags = lags, autocorrelation = as.numeric(autocorr_chain))
+  
+  #Autocorrelation plot
+  p2 <- ggplot(autocorr_data, aes(x = lags, y = autocorrelation)) +
+    geom_point(color = "blue") +
+    geom_line(color = "blue", size = 1) +
+    ggtitle(paste("Autocorrelation ( Burn-in:", burn_in, "   Thin:", thin, ")")) +
+    xlab("Lags") +
+    ylab("Autocorrelation") +
+    theme_minimal() +
+    theme(plot.title = element_text(hjust = 0.5))
+  
+  print(p2)
+}
+
+# All plots
+for (burn_in in burn_in_values) {
+  for (thin in thin_values) {
+    plot_results(samples, burn_in, thin)
+  }
+}
+```
+
+All autocorrelation functions converge to zero, regardless of the parameters selected, but the ones with highest thinnning tends to converge faster.
+
+# Exercise 2
+
+```{r}
+# Dataset
+Y <- c(7.821, -1.494, -15.444, -10.807, -13.735, -14.442, -15.892, -18.32)
+X <- c(5, 6, 7, 8, 9, 10, 11, 12)
+
+data <- list(X = X, Y = Y, N = length(X))
+```
+
+```{r}
+# Model
+model_string <- "model{
+
+  for (i in 1:N) {
+    Z[i] <- a + b * X[i]
+    Y[i] ~ dnorm(Z[i], c)
+  }
+
+  a ~ dunif(1, 10)
+  b ~ dunif(-1, 3)
+  c ~ dunif(0.034, 4)
+  
+}"
+
+# Initial values
+a <- runif(1, 1, 10)
+b <- runif(1, -1, 3)
+c <- runif(1, 0.034, 4)
+
+inits <- list(a = a, b = b, c = c)
+```
+
+```{r}
+model <- jags.model(textConnection(model_string), data = data, inits = inits)
+
+update(model, n.iter = 5000)
+
+samples <- coda.samples(model, variable.names = c("a", "b"), n.iter = 10000)
+
+summary(samples)
+plot(samples)
+```
+
+```{r}
+# 95% credibility interval
+cred_intervals <- summary(samples)$quantiles[, c("2.5%", "97.5%")]
+print(cred_intervals)
+```
+
+```{r}
+# sigma distirbution
+samples_c <- coda.samples(model, variable.names = c("c"), n.iter = 10000)
+c_samples <- as.matrix(samples_c)[, "c"]
+sigma_samples <- 1 / sqrt(c_samples)
+```
+
+```{r}
+# Plot of sigma distribution
+hist(sigma_samples, breaks = 30,
+     main = "Posterior distribution of σ",
+     xlab = "σ",
+     col = "skyblue",
+     border = "black",
+     probability = TRUE)
+```
+
+# Exercise 3
+
+```{r}
+# Dataset
+X <- c(2.06, 5.56, 7.93, 6.56, 2.05)
+
+# Model
+model_string <- "model{
+  
+  for (i in 1:N) {
+    X[i] ~ dnorm(m, 1/(s^2))
+  }
+
+  m ~ dunif(-10, 10)
+  s ~ dunif(0, 50)
+  v <- s^2
+  r <- m / s
+  
+}"
+
+# Initial values
+m <- runif(1, -10, 10)
+s <- runif(1, 0, 50)
+
+inits <- list(m = m, s = s)
+data  <- list(X = X, N = length(X))
+
+model <- jags.model(file = textConnection(model_string), data = data, inits = inits)
+update(model, n.iter = 500)
+
+samples <- coda.samples(model, variable.names = c("m", "v", "r"), n.iter = 10000)
+
+summary(samples)
+plot(samples)
+```
+
+# Exercise 4
+
+```{r}
+# Dataset
+D <- c( 0.0032,	0.0034,	0.214,	0.263,	0.275,	0.275,	0.45,	0.5,	0.5,	0.63,	0.8,	0.9,	0.9,	0.9,	0.9,	2,	2,	2,	2)
+V <- c(170,	290,	-130,	-70,	-185,	-220,	200,	290,	270,	200,	920,	450,	500,	500,	960,	500,	850,	800,	1090)
+
+# Model
+model_string <- "model{
+  
+  for (i in 1:N) {
+    V[i] ~ dnorm(b*D[i], c)
+  }
+
+  b ~ dunif(0, 1000)
+  c ~ dunif(0, 1)
+  
+}"
+
+# Initial values
+b <- runif(1, 0, 1000)
+c <- runif(1, 0, 1)
+
+inits <- list(b = b, c = c)
+data  <- list(V = V, D = D, N = length(D))
+
+model <- jags.model(file = textConnection(model_string), data = data, inits = inits)
+update(model, n.iter = 5000)
+
+samples <- coda.samples(model, variable.names = c("b", "c"), n.iter = 10000)
+
+summary(samples)
+plot(samples)
+```
+
+```{r}
+b_samples <- as.matrix(samples)[, "b"]
+c_samples <- as.matrix(samples)[, "c"]
+
+quantiles <- summary(samples)$quantiles[, c("2.5%", "97.5%")]
+lower_bound_b <- as.numeric(quantiles[1, "2.5%"])
+upper_bound_b <- as.numeric(quantiles[1, "97.5%"])
+lower_bound_c <- as.numeric(quantiles[2, "2.5%"])
+upper_bound_c <- as.numeric(quantiles[2, "97.5%"])
+
+hist(b_samples, breaks = 30,
+     main = "Posterior distribution of b",
+     xlab = "b",
+     col = "skyblue",
+     border = "black",
+     probability = TRUE)
+abline(v = lower_bound_b, col = "red", lwd = 2, lty = 'dashed')
+abline(v = upper_bound_b, col = "red", lwd = 2, lty = 'dashed')
+legend("topright", legend = "95% credibility interval", col = "red", lwd = 2, lty ='dashed')
+
+hist(c_samples, breaks = 30,
+     main = "Posterior distribution of c",
+     xlab = "c",
+     col = "skyblue",
+     border = "black",
+     probability = TRUE)
+abline(v = lower_bound_c, col = "red", lwd = 2, lty = 'dashed')
+abline(v = upper_bound_c, col = "red", lwd = 2, lty = 'dashed')
+legend("topright", legend = "95% credibility interval", col = "red", lwd = 2, lty ='dashed')
+```

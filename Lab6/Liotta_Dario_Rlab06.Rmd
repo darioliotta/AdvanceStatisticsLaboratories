@@ -1,0 +1,397 @@
+---
+title: "Liotta_Dario_Rlab06"
+output: html_document
+date: "2024-06-07"
+---
+
+```{r}
+library(rstan)
+library(ggplot2)
+library(bayesplot)
+```
+
+# Exercise 1
+
+```{r}
+# Data
+X1 <- c(109, 65, 22, 3, 1, 0)
+X2 <- c(144, 91, 32, 11, 2, 0)
+```
+
+A uniform prior and a Poisson likelihood gives a Gamma posterior $\sim t^{k-1}e^{-\mu t}$ where
+
+$$\begin{cases}k=\sum\limits_{i=1}^nx_i+1\\ \mu=n\end{cases}$$
+
+with mean and variance given by
+
+$$E(\lambda)=\frac{k}{\mu} \hspace{1cm} var(\lambda)=\frac{k}{\mu^2}$$
+
+```{r}
+lambdas <- seq(0, 1, by = 10^(-4))
+
+# Parameters for first set of observations
+k1 <- 0
+for(i in 1:length(X1)) {
+  k1 <- k1 + (i-1) * X1[i]
+}
+mu1 <- sum(X1)
+values1  <- dgamma(lambdas, shape = k1, rate = mu1)
+
+# Parameters for second set of observations
+k2 <- 0
+for(i in 1:length(X2)) {
+  k2 <- k2 + (i-1) * X2[i]
+}
+mu2 <- sum(X2)
+values2  <- dgamma(lambdas, shape = k2, rate = mu2)
+
+# Plot
+plot(lambdas, values1,
+     xlab = expression(lambda),
+     ylab = "Probability density",
+     main = "Posterior distribution with uniform prior",
+     type = "l", lwd = 2, col = "blue",
+     ylim = c(0, max(values2))
+     )
+lines(lambdas, values2, type = "l", lwd = 2, col = "red")
+legend("topright", legend = c("First set", "Second set"), col = c("blue", "red"), lwd = 2)
+```
+
+```{r}
+# Printing results
+cat(sprintf("About the first set of observations:\n"))
+cat(sprintf("Mean: %.4f\n", k1/mu1))
+cat(sprintf("Variance: %.4f\n", k1/(mu1^2)))
+cat(sprintf("Median: %.4f\n", qgamma(0.5, shape = k1, rate = mu1)))
+cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", qgamma(0.025, shape = k1, rate = mu1), qgamma(0.975, shape = k1, rate = mu1)))
+
+cat(sprintf("\n\nAbout the second set of observations:\n"))
+cat(sprintf("Mean: %.4f\n", k2/mu2))
+cat(sprintf("Variance: %.4f\n", k2/(mu2^2)))
+cat(sprintf("Median: %.4f\n", qgamma(0.5, shape = k2, rate = mu2)))
+cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", qgamma(0.025, shape = k2, rate = mu2), qgamma(0.975, shape = k2, rate = mu2)))
+```
+
+Using a Jeffrey prior changes only the shape parameter, which becomes $k=\sum\limits_{i=1}^nx_i+\frac{1}{2}$, so we can just pass from $k$ to $k-\frac{1}{2}$ and do the same calculations.
+
+```{r}
+# Correcting parameters
+k1 <- k1 - 0.5
+k2 <- k2 - 0.5
+
+values1  <- dgamma(lambdas, shape = k1, rate = mu1)
+values2  <- dgamma(lambdas, shape = k2, rate = mu2)
+
+# Plot
+plot(lambdas, values1,
+     xlab = expression(lambda),
+     ylab = "Probability density",
+     main = "Posterior distribution with Jeffrey prior",
+     type = "l", lwd = 2, col = "blue",
+     ylim = c(0, max(values2))
+    )
+lines(lambdas, values2, type = "l", lwd = 2, col = "red")
+legend("topright", legend = c("First set", "Second set"), col = c("blue", "red"), lwd = 2)
+```
+
+```{r}
+# Printing results
+cat(sprintf("About the first set of observations:\n"))
+cat(sprintf("Mean: %.4f\n", k1/mu1))
+cat(sprintf("Variance: %.4f\n", k1/(mu1^2)))
+cat(sprintf("Median: %.4f\n", qgamma(0.5, shape = k1, rate = mu1)))
+cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", qgamma(0.025, shape = k1, rate = mu1), qgamma(0.975, shape = k1, rate = mu1)))
+
+cat(sprintf("\n\nAbout the second set of observations:\n"))
+cat(sprintf("Mean: %.4f\n", k2/mu2))
+cat(sprintf("Variance: %.4f\n", k2/(mu2^2)))
+cat(sprintf("Median: %.4f\n", qgamma(0.5, shape = k2, rate = mu2)))
+cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", qgamma(0.025, shape = k2, rate = mu2), qgamma(0.975, shape = k2, rate = mu2)))
+```
+
+# Exercise 2
+
+```{r}
+# Data
+y1    <- c(rep(0, 109), rep(1, 65), rep(2, 22), rep(3, 3), rep(4, 1))
+y2    <- c(rep(0, 144), rep(1, 91), rep(2, 32), rep(3, 11), rep(4, 2))
+data1 <- list(N = length(y1), y = y1)
+data2 <- list(N = length(y2), y = y2)
+
+# Model strings for stan
+model_string_uniform = 
+  " 
+    data {
+      int <lower=0> N; 
+      int y[N]; 
+    } 
+    
+    parameters { 
+      real <lower=0> Lambda; 
+    } 
+    
+    model { 
+      y ~ poisson (Lambda); 
+    }
+  "
+
+model_string_jeffrey = 
+  " 
+    data {
+      int <lower=0> N; 
+      int y[N]; 
+    } 
+    
+    parameters { 
+      real <lower=0> Lambda; 
+    } 
+    
+    model { 
+      target += -0.5*log(Lambda);
+      y ~ poisson (Lambda); 
+    }
+  "
+```
+
+```{r}
+# Function for the posterior analysis
+posterior_analysis <- function(model_string, data_list, bin_width = 0.01) {
+  stan_m  <- stan_model(model_code = model_string)
+  stanFit <- sampling(object = stan_m,
+                      data = data_list, 
+                      chains = 2, 
+                      iter = 10000, 
+                      warmup = 1000, 
+                      thin = 1)
+  
+  # Plot of histogram
+  hist_plot <- mcmc_hist(stanFit, pars = c("Lambda"), binwidth = bin_width) +
+               labs(title = "Posterior histogram of λ",
+                    x = expression(lambda),
+                    y = "Frequency") +
+               theme_minimal() +
+               theme(plot.title = element_text(hjust = 0.5))
+  
+  # Print of results
+  summary_df <- as.data.frame(summary(stanFit)$summary)
+  par_values <- summary_df["Lambda", ]
+  
+  cat(sprintf("\n\n\n"))
+  cat(sprintf("Mean: %.4f\n", par_values["mean"]))
+  cat(sprintf("Variance: %.4f\n", par_values["sd"]^2))
+  cat(sprintf("Median: %.4f\n", par_values["50%"]))
+  cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", par_values["2.5%"], par_values["97.5%"]))
+  
+  print(hist_plot)
+}
+```
+
+Results for the first set of observations (considering a uniform prior).
+
+```{r}
+posterior_analysis(model_string_uniform, data1)
+```
+
+Results for the second set of observations (considering a uniform prior).
+
+```{r}
+posterior_analysis(model_string_uniform, data2)
+```
+
+Results for the first set of observations (considering a Jeffrey prior).
+
+```{r}
+posterior_analysis(model_string_jeffrey, data1)
+```
+
+Results for the second set of observations (considering a Jeffrey prior).
+
+```{r}
+posterior_analysis(model_string_jeffrey, data2)
+```
+
+# Exercise 3
+
+***(a) find the frequentist estimator for p***
+
+Given $y$ samples with high bacter level on a total of $n$, the frequentist estimator will be given by $\frac{y}{n}$.
+
+```{r}
+y <- 11
+n <- 116
+
+cat(sprintf("Frequentist estimator for p: %.3f", y/n))
+```
+
+***(b) using a Beta(1, 10) prior for p, calculate and posterior distribution P (p y)***
+
+Given a beta prior $P(p|\alpha,\beta)$ and a binomial likelihood $P(y|n,p)$, the posterior will be a beta of the form $P(p|\alpha+y,\beta+n-y)$, so we find a posterior:
+
+$$Beta(p|1+11,10+116-11)=Beta(p|12,115)$$
+
+***(c) find the bayesian estimator for p, the posterior mean and variance, and a 95% credible interval***
+
+The bayesian estimator will be given by the mean of the posterior distribution, which, for a beta distribution, is
+
+$$E(p)=\frac{\alpha}{\alpha+\beta}$$
+
+```{r}
+alpha <- 12
+beta  <- 115
+
+cat(sprintf("Bayesian estimator for p: %.3f", alpha/(alpha+beta)))
+```
+
+The variance is
+
+$$var(p)=\frac{\alpha\beta}{(\alpha+\beta)^2(\alpha+\beta+1)}$$
+
+```{r}
+var_p <- (alpha*beta) / ((alpha+beta)*(alpha+beta)*(alpha+beta+1))
+
+cat(sprintf("Variance: %.5f", var_p))
+```
+
+Lastly, let's find the $95%$ credibility interval.
+
+```{r}
+cat(sprintf("95%% credibility interval: [%.3f, %.3f]", qbeta(0.025, alpha, beta), qbeta(0.975, alpha, beta)))
+```
+
+***(d) test the hypothesis***
+
+$$H_0:p=0.1 \ \ \text{versus} \ \ H_1:p\neq0.1$$
+
+***at 5% level of significance with both the frequentist and bayesian approach***
+
+```{r}
+binom.test(x = y, n = n, p = 0.1)
+```
+
+Since $0.1$ also falls into the $95%$ credibility interval for the posterior distribution, we accept the hypothesis with both the frequentist and the bayesian approach.
+
+***(e) find the frequentist estimator for p***
+
+```{r}
+y <- 9
+n <- 165
+
+cat(sprintf("Frequentist estimator for p: %.3f", y/n))
+```
+
+***(f) find a bayesian estimator for p, assuming both a Beta(1,10) prior for p, and assuming the posterior probability of the older measurement as the prior for the new one.***
+
+Assuming a $Beta(1,10)$ prior:
+
+$$\begin{cases}\alpha=1+9=10\\ \beta=10+165-9=166\end{cases}$$
+
+```{r}
+alpha <- 10
+beta  <- 166
+
+cat(sprintf("Bayesian estimator for p: %.3f", alpha/(alpha+beta)))
+```
+
+Instead, assuming the previous posterior as a prior:
+
+$$\begin{cases}\alpha=12+9=21\\ \beta=115+165-9=271\end{cases}$$
+
+```{r}
+alpha <- 21
+beta  <- 271
+
+cat(sprintf("Bayesian estimator for p: %.3f", alpha/(alpha+beta)))
+```
+
+***(g) find the bayesian estimator for p, the posterior mean and variance, and a 95% credible interval***
+
+```{r}
+alpha <- 10
+beta  <- 166
+var_p <- (alpha*beta) / ((alpha+beta)*(alpha+beta)*(alpha+beta+1))
+
+cat(sprintf("Considering a Beta(1, 10) prior:\n"))
+cat(sprintf("Variance: %.5f\n", var_p))
+cat(sprintf("95%% credibility interval: [%.3f, %.3f]", qbeta(0.025, alpha, beta), qbeta(0.975, alpha, beta)))
+
+
+
+alpha <- 21
+beta  <- 271
+var_p <- (alpha*beta) / ((alpha+beta)*(alpha+beta)*(alpha+beta+1))
+
+cat(sprintf("\n\nConsidering the previous posterior as prior:\n"))
+cat(sprintf("Variance: %.5f\n", var_p))
+cat(sprintf("95%% credibility interval: [%.3f, %.3f]", qbeta(0.025, alpha, beta), qbeta(0.975, alpha, beta)))
+```
+
+***(h) test the hypothesis***
+
+$$H_0:p=0.1 \ \ \text{versus} \ \ H_1:p\neq0.1$$
+
+***at 5% level of significance with both the frequentist and bayesian approach***
+
+```{r}
+binom.test(x = y, n = n, p = 0.1)
+```
+
+While $H_0$ is accepted considering the frequentist approach, the bayesian approach depends on the prior chosen: with the previous posterior $0.1$ is inside the $95%$ confidence interval, but with the $Beta(1,10)$ prior that is not the case, so the hypothesis $H_0$ is not accepted.
+
+# Exercise 4
+
+```{r}
+# Data
+y <- 11
+n <- 116
+data_list <- list(n = n, y = y)
+
+# Model string for stan
+model_string  = 
+  " 
+    data {
+      int <lower=0> n; 
+      int <lower=0> y;
+    } 
+    
+    parameters { 
+      real <lower=0, upper=1> p; 
+    } 
+    
+    model { 
+      p ~ beta (1, 10);
+      y ~ binomial (n, p); 
+    }
+  "
+```
+
+```{r}
+stan_m  <- stan_model(model_code = model_string)
+stanFit <- sampling(object = stan_m,
+                    data = data_list, 
+                    chains = 2, 
+                    iter = 10000, 
+                    warmup = 1000, 
+                    thin = 1)
+```
+
+```{r}
+# Plot of the distribution
+hist_plot <- mcmc_hist(stanFit, pars = c("p"), binwidth = 0.01) +
+              labs(title = "Posterior histogram of p",
+                   x = "p",
+                   y = "Frequency") +
+              theme_minimal() +
+              theme(plot.title = element_text(hjust = 0.5))
+
+print(hist_plot)
+
+# Print of the results
+summary_df <- as.data.frame(summary(stanFit)$summary)
+par_values <- summary_df["p", ]
+  
+cat(sprintf("\n\n\n"))
+cat(sprintf("Mean (also bayesian estimator for p): %.4f\n", par_values["mean"]))
+cat(sprintf("Variance: %.4f\n", par_values["sd"]^2))
+cat(sprintf("Median: %.4f\n", par_values["50%"]))
+cat(sprintf("95%% credibility interval: [%.4f, %.4f]\n", par_values["2.5%"], par_values["97.5%"]))
+```

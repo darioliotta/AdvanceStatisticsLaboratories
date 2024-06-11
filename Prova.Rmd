@@ -1,0 +1,74 @@
+---
+title: "Prova"
+output: html_document
+date: "2024-05-29"
+---
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+```{r}
+x <- c(5, 10, 15, 20, 25)
+n <- 30
+
+params <- data.frame(
+  alpha = x + 1,
+  beta  = n - x + 1,
+  group = factor(paste("", x))
+)
+
+ps <- seq(0, 1, by = 10^(-5))
+
+data <- params %>%
+  group_by(group) %>%
+  do(data.frame(ps = ps, densities = dbeta(ps, .$alpha, .$beta)))
+
+ggplot(data, aes(x = ps, y = densities, color = as.factor(group))) +
+  geom_line(size = 1.25) + 
+  geom_hline(yintercept = 1, color = "red2", size = 0.75, show.legend = TRUE) +
+  labs(x = expression(pi), y = 'Densità di probabilità') +
+  theme_minimal(base_size = 15) +  
+  theme(
+    axis.title.x = element_text(face = "italic", size = 15, margin = margin(t = 12)), 
+    axis.title.y = element_text(face = "italic", size = 15, margin = margin(r = 12)),  
+    panel.background = element_rect(fill = "white")
+  ) +
+  scale_color_discrete(name = "x") +
+  guides(color = guide_legend(title = "x"))
+```
+
+```{r}
+x <- c(5, 10, 15, 20, 25)
+n <- 30
+alpha_p <- 10
+beta_p  <- 10
+
+params <- data.frame(
+  alpha = x + alpha_p,
+  beta  = n - x + beta_p,
+  group = factor(paste("", x))
+)
+
+ps <- seq(0, 1, by = 10^(-5))
+
+data <- params %>%
+  group_by(group) %>%
+  do(data.frame(ps = ps, densities = dbeta(ps, .$alpha, .$beta)))
+
+ggplot(data, aes(x = ps, y = densities, color = as.factor(group))) +
+    geom_line(size = 1.25) +
+    geom_line(aes(x = ps, y = dbeta(ps, alpha_p, beta_p)), color = 'gray0', size = 1) +
+    geom_hline(yintercept = 1, color = "red", linetype = "dashed", size = 1) +
+    scale_color_discrete(name = "x") +
+    labs(x = expression(pi), y = 'Densità di probabilità') +
+    theme_minimal(base_size = 15) +  
+    theme(
+      axis.title.x = element_text(face = "italic", size = 15, margin = margin(t = 12)), 
+      axis.title.y = element_text(face = "italic", size = 15, margin = margin(r = 12)),  
+      panel.background = element_rect(fill = "white")
+    ) +
+    guides(color = guide_legend(title = "x")) + 
+    annotate("text", x = 0.88, y = 0.66, label = "Beta prior", hjust = 0, color = 'red')
+```
